@@ -1,0 +1,183 @@
+diff -ruN civic_v15_old/README.md civic_v16_work/README.md
+--- civic_v15_old/README.md	2026-11-16 13:12:48.000000000 +0000
++++ civic_v16_work/README.md	2026-11-16 20:32:11.814152210 +0000
+@@ -1,4 +1,4 @@
+-# Civic G8 — Launcher independente v1.5
++# Civic G8 — Launcher independente v1.6
+ 
+ Projeto Android nativo (Java) para multimídia Android do Honda Civic G8 2011. **Não é o Rota Launcher** nem modificação dele. A arte de referência aprovada é `app/src/main/res/drawable-nodpi/civic_ui_compacto.webp`.
+ 
+@@ -26,9 +26,9 @@
+ 
+ ```json
+ {
+-  "versionCode": 6,
+-  "versionName": "1.5.0",
+-  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.5.apk",
++  "versionCode": 7,
++  "versionName": "1.6.0",
++  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.6.apk",
+   "sha256": "SHA256_REAL_DO_APK_DEPOIS_DA_COMPILACAO"
+ }
+ ```
+@@ -43,9 +43,15 @@
+ - Não colocar token Nova embutido em APK ou GitHub.
+ - As imagens ilustram o Civic G8, não comprovam equipamento específico do carro.
+ 
+-## Alterações da v1.5
++## Alterações da v1.6
+ - Retirados do cabeçalho do wallpaper o nome CIVIC G8, relógio e ícones duplicados; preservada a logo Honda e todo o restante do visual.
+ - OBD2 reconecta automaticamente ao ELM327 previamente selecionado; no primeiro uso seleciona sozinho apenas quando houver um único adaptador OBD pareado, evitando escolha equivocada. OBD2 continua podendo ser selecionado no menu.
+ - Ao abrir o launcher tenta reconectar o adaptador; após desconexão faz novas tentativas com intervalo, sem necessidade de tocar no indicador.
+ - Bloco Motor passou a Arrefecimento, com valor ECT de PID 0105 e barra discreta, sem inventar temperatura sem leitura.
+-- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.5 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
++- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.6 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
++
++## Alterações da v1.6
++- Dashboards ganhou MAP 010B, carga calculada 0104, temperatura de admissão 010F e correção curta de combustível STFT banco 1 0106.
++- Sensores avançados lidos em rodízio, um por ciclo, sem modificar ECU e sem alterar a home.
++- Sensores não suportados apresentam traço, sem valor simulado.
++- Ainda requer assinatura digital permanente via GitHub Actions Secrets para atualizar instalações anteriores sem desinstalar.
+diff -ruN civic_v15_old/app/build.gradle civic_v16_work/app/build.gradle
+--- civic_v15_old/app/build.gradle	2026-11-16 13:12:24.000000000 +0000
++++ civic_v16_work/app/build.gradle	2026-11-16 20:32:11.809017167 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 6
+-        versionName '1.5.0'
++        versionCode 7
++        versionName '1.6.0'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN civic_v15_old/app/src/main/java/br/com/civicdrive/DashboardActivity.java civic_v16_work/app/src/main/java/br/com/civicdrive/DashboardActivity.java
+--- civic_v15_old/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-16 13:12:24.000000000 +0000
++++ civic_v16_work/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-16 20:32:11.814052600 +0000
+@@ -20,7 +20,7 @@
+     private static final int BG=Color.rgb(4,9,16), BLUE=Color.rgb(26,116,255);
+     private static final int MUTE=Color.rgb(142,162,182);
+     private final Handler handler=new Handler(Looper.getMainLooper());
+-    private TextView rpm, temp, volts, speed, consume, fuel, trip, state;
++    private TextView rpm, temp, volts, speed, consume, fuel, trip, state, map, load, iat, trim;
+     private final Runnable tick=new Runnable(){@Override public void run(){update();handler.postDelayed(this,1200);}};
+     @Override public void onCreate(Bundle stateBundle){
+         super.onCreate(stateBundle);
+@@ -40,8 +40,13 @@
+         LinearLayout line2=new LinearLayout(this);line2.setPadding(0,dp(8),0,dp(8));root.addView(line2);
+         volts=metric(line2,"TENSÃO ELM327","— V");consume=metric(line2,"CONSUMO MÉDIO EST.","— km/L");fuel=metric(line2,"CONSUMO INSTANTÂNEO EST.","— L/h");
+         LinearLayout line3=new LinearLayout(this);line3.setPadding(0,dp(8),0,dp(8));root.addView(line3);
+-        trip=metric(line3,"DISTÂNCIA COMPUTADA NA VIAGEM","— km");
+-        TextView foot=txt("ℹ  Alguns ECUs não disponibilizam vazão de combustível. Neste caso, o painel apresenta —. A velocidade GPS depende da antena e de um sinal válido. Não utilize o aplicativo para decisões críticas de condução.",12,MUTE,false);
++        map=metric(line3,"PRESSÃO DO COLETOR (MAP)","— kPa");
++        load=metric(line3,"CARGA DO MOTOR","— %");
++        iat=metric(line3,"TEMP. DE ADMISSÃO (IAT)","— °C");
++        LinearLayout line4=new LinearLayout(this);line4.setPadding(0,dp(8),0,dp(8));root.addView(line4);
++        trim=metric(line4,"CORREÇÃO DE COMBUSTÍVEL (STFT)","— %");
++        trip=metric(line4,"DISTÂNCIA COMPUTADA NA VIAGEM","— km");
++        TextView foot=txt("ℹ  Nem todos os ECUs fornecem todos os sensores. MAP, IAT, carga e STFT são leituras OBD2; o consumo é estimado. Dados indisponíveis aparecem como —. Não utilize o aplicativo para decisões críticas de condução.",12,MUTE,false);
+         foot.setPadding(0,dp(14),0,0);root.addView(foot);
+         setContentView(scroll);
+     }
+@@ -65,6 +70,10 @@
+         v=p.getFloat("volts",-1);volts.setText(online&&v>0?String.format(Locale.getDefault(),"%.1f V",v):"— V");
+         v=p.getFloat("kmL",-1);consume.setText(online&&v>0?String.format(Locale.getDefault(),"%.1f km/L",v):"— km/L");
+         v=p.getFloat("fuelRate",-1);fuel.setText(online&&v>=0?String.format(Locale.getDefault(),"%.2f L/h",v):"— L/h");
++        v=p.getFloat("mapKpa",-1);map.setText(online&&v>=0?String.format(Locale.getDefault(),"%.0f kPa",v):"— kPa");
++        v=p.getFloat("engineLoad",-1);load.setText(online&&v>=0?String.format(Locale.getDefault(),"%.0f %%",v):"— %");
++        v=p.getFloat("intakeTemp",-999);iat.setText(online&&v>-100?String.format(Locale.getDefault(),"%.0f °C",v):"— °C");
++        v=p.getFloat("stft",-999);trim.setText(online&&v>-200?String.format(Locale.getDefault(),"%+.1f %%",v):"— %");
+         v=p.getFloat("tripKm",0);trip.setText(v>0?String.format(Locale.getDefault(),"%.2f km",v):"— km");
+     }
+     @Override protected void onResume(){super.onResume();handler.post(tick);}
+diff -ruN civic_v15_old/app/src/main/java/br/com/civicdrive/MainActivity.java civic_v16_work/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- civic_v15_old/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-16 13:18:52.000000000 +0000
++++ civic_v16_work/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-16 20:32:11.813148662 +0000
+@@ -67,6 +67,7 @@
+     private double rpm = -1d;
+     private int coolant = -999, obdSpeed = -1;
+     private float volts = -1f;
++    private double mapKpa = -1, engineLoadPct = -1, intakeTempC = -999, shortFuelTrimPct = -999;
+     private double avgKmL = -1d, fuelLitresPerHour = -1d, tripDistanceKm = 0d, tripFuelLitres = 0d;
+     private long lastFuelMs = 0L;
+     private final Runnable ticker = new Runnable() {
+@@ -99,6 +100,7 @@
+                     obdConnected = connected;
+                     if (!connected) { rpm = -1; coolant = -999; volts = -1; obdSpeed = -1;
+                         fuelLitresPerHour = -1; lastFuelMs = 0;
++                        mapKpa=-1; engineLoadPct=-1; intakeTempC=-999; shortFuelTrimPct=-999;
+                         nextObdRetryMs = System.currentTimeMillis() + 12000L;
+                     } else nextObdRetryMs = 0L;
+                     saveTelemetry();
+@@ -120,6 +122,12 @@
+                     surface.invalidate();
+                 });
+             }
++            @Override public void onExtended(double map, double load, double intake, double trim) {
++                runOnUiThread(() -> {
++                    mapKpa=map; engineLoadPct=load; intakeTempC=intake; shortFuelTrimPct=trim;
++                    saveTelemetry();
++                });
++            }
+         });
+         surface = new Ui();
+         setContentView(surface);
+@@ -156,6 +164,8 @@
+                 .putFloat("gps",gpsKmh).putInt("obdSpeed",obdSpeed)
+                 .putFloat("fuelRate",(float)fuelLitresPerHour).putFloat("kmL",(float)avgKmL)
+                 .putFloat("tripKm",(float)tripDistanceKm).putFloat("tripL",(float)tripFuelLitres)
++                .putFloat("mapKpa",(float)mapKpa).putFloat("engineLoad",(float)engineLoadPct)
++                .putFloat("intakeTemp",(float)intakeTempC).putFloat("stft",(float)shortFuelTrimPct)
+                 .putLong("lastUpdate",System.currentTimeMillis()).apply();
+     }
+ 
+@@ -264,7 +274,7 @@
+                         case 5:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+                         case 6:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                         case 7:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.5")
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.6")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
+diff -ruN civic_v15_old/app/src/main/java/br/com/civicdrive/ObdManager.java civic_v16_work/app/src/main/java/br/com/civicdrive/ObdManager.java
+--- civic_v15_old/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-16 13:12:24.000000000 +0000
++++ civic_v16_work/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-16 20:32:11.810318618 +0000
+@@ -22,6 +22,7 @@
+         void onStatus(String message, boolean connected);
+         void onValues(double rpm, int coolant, float voltage, int speed);
+         void onFuelRate(double litresPerHour);
++        void onExtended(double mapKpa, double loadPct, double intakeC, double shortFuelTrimPct);
+     }
+ 
+     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+@@ -65,6 +66,10 @@
+             command(out, in, "ATSP0", 3500);
+             if (generation == session) notifyStatus("OBD2 conectado  •  dados ao vivo", true);
+ 
++            // Sensores extras consultados alternadamente para preservar RPM/ECT e evitar
++            // sobrecarregar um ELM327 lento. Valores ausentes continuam indisponíveis.
++            double[] extras = {-1, -1, -999, -999};
++            int extraRound = 0;
+             while (!stopped && generation == session) {
+                 double rpm = parseRpm(command(out, in, "010C", 3500));
+                 int temp = parseTemperature(command(out, in, "0105", 3500));
+@@ -77,6 +82,17 @@
+                 double fuelRate = parseFuelRate(command(out, in, "015E", 3500));
+                 if (fuelRate < 0) fuelRate = parseMafBasedFuelRate(command(out, in, "0110", 3500));
+                 if (generation == session) listener.onFuelRate(fuelRate);
++                int which = extraRound++ % 4;
++                String pid = which == 0 ? "010B" : which == 1 ? "0104" : which == 2 ? "010F" : "0106";
++                String data = command(out, in, pid, 2500);
++                int[] bytes = parsePid(data, pid.substring(2), 1);
++                if (bytes != null) {
++                    if (which == 0) extras[0] = bytes[0]; // MAP, kPa
++                    if (which == 1) extras[1] = bytes[0] * 100.0 / 255.0; // Carga %
++                    if (which == 2) extras[2] = bytes[0] - 40; // IAT, graus C
++                    if (which == 3) extras[3] = (bytes[0] - 128) * 100.0 / 128.0; // STFT banco 1
++                }
++                if (generation == session) listener.onExtended(extras[0], extras[1], extras[2], extras[3]);
+                 Thread.sleep(800);
+             }
+         } catch (Exception e) {
