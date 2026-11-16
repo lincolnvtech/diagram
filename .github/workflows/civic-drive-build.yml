@@ -1,63 +1,129 @@
-name: Civic Drive G8 - Compilar APK
+name: Civic G8 - APK assinado permanente
 on:
   push:
     branches: [civic-drive-build]
     paths:
       - 'civic-drive/source-zip.base64'
       - 'civic-drive/v1.6.patch'
+      - 'civic-drive/signing.enc.json'
       - '.github/workflows/civic-drive-build.yml'
   workflow_dispatch:
+
 jobs:
-  assemble-apk:
+  assemble-signed-apk:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Obter o projeto isolado
         uses: actions/checkout@v4
         with:
           ref: civic-drive-build
-      - name: Java 17
+      - name: Preparar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Gradle 8.9
+      - name: Preparar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preparar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Restaurar codigo Android
+      - name: Restaurar o projeto Android
+        shell: bash
         run: |
+          set -Eeuo pipefail
           mkdir -p build-civic
-          base64 -d civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
+          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
           unzip -q /tmp/civic-g8-src.zip -d build-civic
           test -f build-civic/app/build.gradle
           (cd build-civic && patch --batch -p1 < ../civic-drive/v1.6.patch)
+          grep -q "versionCode 7" build-civic/app/build.gradle
           grep -q "versionName '1.6.0'" build-civic/app/build.gradle
-      - name: Android SDK
+          sed -i "s/versionCode 7/versionCode 8/; s/versionName '1.6.0'/versionName '1.7.0'/" build-civic/app/build.gradle
+          grep -q "versionCode 8" build-civic/app/build.gradle
+          grep -q "versionName '1.7.0'" build-civic/app/build.gradle
+      - name: Instalar ferramentas do Android
+        shell: bash
         run: |
+          set -Eeuo pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
-      - name: Compilar APK
-        working-directory: build-civic
-        run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Conferir e publicar instalador
+      - name: Preparar verificador AES-GCM
+        run: python -m pip install --disable-pip-version-check --quiet 'cryptography==46.0.4'
+      - name: Compilar e assinar com a chave permanente
+        env:
+          CIVIC_SIGNING_KEY: ${{ secrets.CIVIC_SIGNING_KEY }}
+        shell: bash
         run: |
-          APK=build-civic/app/build/outputs/apk/debug/app-debug.apk
+          set -Eeuo pipefail
+          python - <<'PY'
+          import os, subprocess, json, base64, pathlib, tempfile
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+          root = pathlib.Path.cwd()
+          secret = os.environ.get('CIVIC_SIGNING_KEY', '').strip()
+          if not secret:
+              raise SystemExit('ERRO: Configure o segredo CIVIC_SIGNING_KEY em Settings > Secrets and variables > Actions. Nao foi publicado APK sem assinatura.')
+          raw_key = base64.b64decode(secret, validate=True)
+          if len(raw_key) != 32:
+              raise SystemExit('ERRO: CIVIC_SIGNING_KEY invalida; deve ter 32 bytes em base64.')
+          enc = json.loads((root/'civic-drive/signing.enc.json').read_text())
+          if enc.get('format') != 1 or enc.get('algorithm') != 'AES-256-GCM':
+              raise SystemExit('ERRO: Formato de assinatura nao reconhecido.')
+          bundle = json.loads(AESGCM(raw_key).decrypt(
+              base64.b64decode(enc['nonce']),
+              base64.b64decode(enc['ciphertext']),
+              b'CIVIC-G8-RELEASE-SIGNING-V1'))
+          if bundle.get('alias') != 'civic-g8-release':
+              raise SystemExit('ERRO: Alias de assinatura divergente.')
+          android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
+          unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
+          signed = root/'civic-drive/civic-drive-v1.7.apk'
+          with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
+              keystore = pathlib.Path(temporary)/'release.p12'
+              keystore.write_bytes(base64.b64decode(bundle['keyStore']))
+              os.chmod(keystore, 0o600)
+              subprocess.run(['gradle', '--no-daemon', '--stacktrace', 'assembleRelease'], cwd=root/'build-civic',check=True)
+              if not unsigned.is_file() or unsigned.stat().st_size < 1000:
+                  raise SystemExit('ERRO: APK release nao foi compilado.')
+              env = os.environ.copy()
+              env['CIVIC_STORE_PASSWORD'] = bundle['storePassword']
+              env['CIVIC_KEY_PASSWORD'] = bundle['keyPassword']
+              subprocess.run([str(android_tools/'apksigner'), 'sign',
+                  '--ks', str(keystore), '--ks-type', 'PKCS12',
+                  '--ks-key-alias', bundle['alias'],
+                  '--ks-pass', 'env:CIVIC_STORE_PASSWORD',
+                  '--key-pass', 'env:CIVIC_KEY_PASSWORD',
+                  '--out', str(signed), str(unsigned)], env=env,check=True)
+              certs = subprocess.check_output([str(android_tools/'apksigner'), 'verify',
+                  '--min-sdk-version','24','--verbose','--print-certs',str(signed)], text=True)
+              expected = '4d99bc5b17bab2a71962f1d308e1afd3fc9dfdc5e5110da0759a4b4ef37e2b7d'
+              if expected not in certs.replace(':','').lower():
+                  raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
+          print('APK v1.7 validado com assinatura permanente.')
+          PY
+      - name: Publicar APK e manifesto da atualizacao
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK=civic-drive/civic-drive-v1.7.apk
           test -s "$APK"
-          mkdir -p civic-drive
-          cp "$APK" civic-drive/civic-drive-v1.6.apk
+          cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":7,"versionName":"1.6.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.6.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add civic-drive/civic-drive-v1.6.apk civic-drive/latest.json
+          printf '{"versionCode":8,"versionName":"1.7.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.7.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add civic-drive/civic-drive-v1.7.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m "build: Civic G8 1.6 APK de teste"
+            git commit -m 'build: Civic G8 1.7 assinatura permanente'
             git push origin HEAD:civic-drive-build
           fi
-      - name: Guardar artefato de teste
+      - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.6-debug-apk
-          path: build-civic/app/build/outputs/apk/debug/app-debug.apk
+          name: civic-g8-v1.7-release
+          path: civic-drive/civic-drive-v1.7.apk
