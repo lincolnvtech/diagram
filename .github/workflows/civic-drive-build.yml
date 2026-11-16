@@ -19,6 +19,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: civic-drive-build
+      - name: Verificar se o segredo permanente foi configurado
+        env:
+          CIVIC_SIGNING_KEY: ${{ secrets.CIVIC_SIGNING_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$CIVIC_SIGNING_KEY" ]; then
+            echo 'Configure CIVIC_SIGNING_KEY em Settings > Secrets and variables > Actions para liberar a compilacao assinada.'
+            exit 1
+          fi
       - name: Preparar Java 17
         uses: actions/setup-java@v4
         with:
@@ -101,7 +110,7 @@ jobs:
                   '--out', str(signed), str(unsigned)], env=env,check=True)
               certs = subprocess.check_output([str(android_tools/'apksigner'), 'verify',
                   '--min-sdk-version','24','--verbose','--print-certs',str(signed)], text=True)
-              expected = '4d99bc5b17bab2a71962f1d308e1afd3fc9dfdc5e5110da0759a4b4ef37e2b7d'
+              expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
           print('APK v1.7 validado com assinatura permanente.')
