@@ -4,6 +4,7 @@ on:
     branches: [civic-drive-build]
     paths:
       - 'civic-drive/source-zip.base64'
+      - 'civic-drive/v1.6.patch'
       - '.github/workflows/civic-drive-build.yml'
   workflow_dispatch:
 jobs:
@@ -31,7 +32,8 @@ jobs:
           base64 -d civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
           unzip -q /tmp/civic-g8-src.zip -d build-civic
           test -f build-civic/app/build.gradle
-          grep -q "versionName '1.5.0'" build-civic/app/build.gradle
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.6.patch)
+          grep -q "versionName '1.6.0'" build-civic/app/build.gradle
       - name: Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
@@ -44,18 +46,18 @@ jobs:
           APK=build-civic/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           mkdir -p civic-drive
-          cp "$APK" civic-drive/civic-drive-v1.5.apk
+          cp "$APK" civic-drive/civic-drive-v1.6.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":6,"versionName":"1.5.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.5.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":7,"versionName":"1.6.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.6.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add civic-drive/civic-drive-v1.5.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v1.6.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m "build: Civic G8 1.5 APK de teste"
+            git commit -m "build: Civic G8 1.6 APK de teste"
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar artefato de teste
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.5-debug-apk
+          name: civic-g8-v1.6-debug-apk
           path: build-civic/app/build/outputs/apk/debug/app-debug.apk
