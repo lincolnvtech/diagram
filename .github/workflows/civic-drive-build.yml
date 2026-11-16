@@ -1,8 +1,7 @@
-name: Civic Drive - Compilar APK
+name: Civic Drive G8 - Compilar APK
 on:
   push:
-    branches:
-      - civic-drive-build
+    branches: [civic-drive-build]
     paths:
       - 'civic-drive/source-zip.base64'
       - '.github/workflows/civic-drive-build.yml'
@@ -17,45 +16,46 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: civic-drive-build
-      - name: Instalar Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Instalar Gradle
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Preparar codigo-fonte
+      - name: Restaurar codigo Android
         run: |
           mkdir -p build-civic
-          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-drive-src.zip
-          unzip -q /tmp/civic-drive-src.zip -d build-civic
+          base64 -d civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
+          unzip -q /tmp/civic-g8-src.zip -d build-civic
           test -f build-civic/app/build.gradle
+          grep -q "versionName '1.4.0'" build-civic/app/build.gradle
       - name: Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
-      - name: Compilar APK de teste
+      - name: Compilar APK
         working-directory: build-civic
         run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Conferir APK
+      - name: Conferir e publicar instalador
         run: |
-          test -s build-civic/app/build/outputs/apk/debug/app-debug.apk
-          ls -lh build-civic/app/build/outputs/apk/debug/app-debug.apk
-      - name: Publicar instalador na branch isolada
-        run: |
+          APK=build-civic/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
           mkdir -p civic-drive
-          cp build-civic/app/build/outputs/apk/debug/app-debug.apk civic-drive/civic-drive-v1.2.apk
+          cp "$APK" civic-drive/civic-drive-v1.4.apk
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          printf '{"versionCode":5,"versionName":"1.4.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.4.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add civic-drive/civic-drive-v1.2.apk
+          git add civic-drive/civic-drive-v1.4.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m "build: Civic Drive 1.2 APK de teste"
+            git commit -m "build: Civic G8 1.4 APK de teste"
             git push origin HEAD:civic-drive-build
           fi
-      - name: APK como artefato
+      - name: Guardar artefato de teste
         uses: actions/upload-artifact@v4
         with:
-          name: civic-drive-v1-2-installavel
+          name: civic-g8-v1.4-debug-apk
           path: build-civic/app/build/outputs/apk/debug/app-debug.apk
