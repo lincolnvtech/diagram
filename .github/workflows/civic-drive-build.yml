@@ -1,3 +1,4 @@
+# Trigger: recompilar v1.7 apos cadastro do segredo permanente no GitHub.
 name: Civic G8 - APK assinado permanente
 on:
   push:
