@@ -1,0 +1,474 @@
+diff -ruN civic_v19_baseline/app/build.gradle civic_v19_source/app/build.gradle
+--- civic_v19_baseline/app/build.gradle	2026-11-18 13:47:58.000000000 +0000
++++ civic_v19_source/app/build.gradle	2026-11-18 18:46:37.264514746 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 9
+-        versionName '1.8.0'
++        versionCode 10
++        versionName '1.9.0'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN civic_v19_baseline/app/src/main/java/br/com/civicdrive/MainActivity.java civic_v19_source/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- civic_v19_baseline/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-18 13:49:44.000000000 +0000
++++ civic_v19_source/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-18 18:46:37.264287814 +0000
+@@ -209,122 +209,321 @@
+         openPackage(pkg);
+     }
+ 
++    /**
++     * Native responsive HUD, without any baked-in telemetry or speed-color legend.
++     * Draws only live GPS / OBD values. Its center is a small animated energy orb.
++     */
+     private final class Ui extends View {
+-        private final Bitmap image;
+-        private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+-        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+-        private final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+-        private float touchX, touchY;
+-        private final Drawable[] shortcutIcons = new Drawable[3];
+-        private final String[] shortcutKeys = new String[3];
+-        Ui() {
++        private static final float CW=1648f, CH=928f;
++        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
++        private final Bitmap civic = BitmapFactory.decodeResource(getResources(), R.drawable.civic_cinema);
++        private final Drawable[] shortcuts = new Drawable[3];
++        private final String[] shortcutsNames = new String[3];
++        private int wallpaper = 0; // 0 = Nova (animated), 1 = Civic photo, 2 = quiet energy
++        private int orbColor = Color.rgb(27, 194, 239);
++        private float downX, downY;
++        private long downAt;
++        private boolean animationRunning = true;
++        private final float[] dockX = {174, 358, 542, 726, 910, 1094, 1278, 1462};
++        private final String[] dockNames = {"Início","Dash","Waze","Rádio","+","Apps","Fundo","Nova"};
++        Ui(){
+             super(MainActivity.this);
+-            image = BitmapFactory.decodeResource(getResources(), R.drawable.civic_ui_compacto);
+-            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+-            setContentDescription("Civic G8. Menu compacto à direita, dashboards e Nova.");
+-        }
+-        private void erase(Canvas canvas, float left, float top, float right, float bottom, int shade) {
+-            fill.setColor(shade);
+-            fill.setStyle(Paint.Style.FILL);
+-            canvas.drawRoundRect(new RectF(left,top,right,bottom),7f,7f,fill);
+-        }
+-        private void print(Canvas canvas,String message,float x,float baseline,float size,int color, boolean bold) {
+-            text.setColor(color);text.setTextSize(size);
+-            text.setTypeface(android.graphics.Typeface.create(bold ? "sans-serif-medium" : "sans-serif", bold ? 1 : 0));
+-            canvas.drawText(message,x,baseline,text);
+-        }
+-        @Override protected void onDraw(Canvas c) {
+-            super.onDraw(c);
+-            c.save();c.scale(getWidth()/1648f,getHeight()/928f);
+-            if (image != null) c.drawBitmap(image,null,new RectF(0,0,1648,928),bitmapPaint);
+-            // Remove da arte os valores ilustrativos; todos os números abaixo são do dispositivo.
+-            // The multimedia system already shows the real clock and notification icons.
+-            // This launcher deliberately does not draw a duplicate header.
+-            erase(c,89,136,333,271,Color.rgb(4,10,17));
+-            String speed = gpsKmh>=0?String.format(PT,"%.0f",gpsKmh):"—";
+-            print(c,speed,96,249,122,LIGHT,true);
+-            print(c,"km/h",Math.min(230,112+speed.length()*63),244,39,LIGHT,false);
+-            erase(c,181,835,398,882,Color.rgb(3,11,19));
+-            print(c,obdStatus,190,866,28,obdConnected?Color.WHITE:Color.rgb(165,176,190),false);
+-            erase(c,594,835,770,885,Color.rgb(4,11,18));
+-            print(c,rpm>=0?String.format(PT,"%.0f rpm",rpm):"—",604,870,30,LIGHT,true);
+-            // Cooling system temperature (OBD PID 0105) + discreet live gauge.
+-            erase(c,948,791,1134,836,Color.rgb(4,11,18));
+-            print(c,"Arrefecimento",948,819,24,LIGHT,false);
+-            erase(c,939,837,1114,883,Color.rgb(5,12,21));
+-            print(c,obdConnected && coolant > -100?coolant+" °C":"— °C",947,868,31,LIGHT,true);
+-            fill.setColor(Color.rgb(24,52,75));
+-            c.drawRoundRect(new RectF(949,882,1110,886),3,3,fill);
+-            if (obdConnected && coolant > -100) {
+-                float fraction = Math.max(0f, Math.min(1f,(coolant - 40f) / 75f));
+-                fill.setColor(coolant >= 105 ? Color.rgb(245,174,60) : BLUE);
+-                c.drawRoundRect(new RectF(949,882,949 + 161 * fraction,886),3,3,fill);
++            wallpaper=getSharedPreferences("civic_wallpaper",MODE_PRIVATE).getInt("mode",0);
++            setContentDescription("Civic Drive. Nova em energia animada, temperatura, RPM e menu de aplicativos.");
++        }
++        void resumeAnimation() { animationRunning=true;invalidate(); }
++        void pauseAnimation() { animationRunning=false; }
++        void useWallpaper(int mode){ wallpaper=mode;getSharedPreferences("civic_wallpaper",MODE_PRIVATE).edit().putInt("mode",mode).apply();invalidate(); }
++        private void color(int c){p.reset();p.setAntiAlias(true);p.setFilterBitmap(true);p.setColor(c);}
++        private void txt(Canvas c,String s,float x,float baseline,float size,int tint,boolean bold){
++            color(tint);p.setTextSize(size);p.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
++            c.drawText(s,x,baseline,p);
++        }
++        private void center(Canvas c,String s,float x,float baseline,float size,int tint,boolean bold){
++            color(tint);p.setTextSize(size);p.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
++            c.drawText(s,x-p.measureText(s)/2,baseline,p);
++        }
++        private void line(Canvas c,float x1,float y1,float x2,float y2,int tint,float stroke){
++            color(tint);p.setStrokeWidth(stroke);p.setStrokeCap(Paint.Cap.ROUND);c.drawLine(x1,y1,x2,y2,p);
++        }
++        private void outline(Canvas c,RectF rect,float radius,int tint,float stroke){
++            color(tint);p.setStrokeWidth(stroke);p.setStyle(Paint.Style.STROKE);c.drawRoundRect(rect,radius,radius,p);p.setStyle(Paint.Style.FILL);
++        }
++        private void glowBackground(Canvas c){
++            color(Color.rgb(1,7,15));c.drawRect(0,0,CW,CH,p);
++            color(Color.WHITE);
++            p.setShader(new android.graphics.LinearGradient(0,0,0,CH,Color.rgb(5,20,36),Color.rgb(1,7,14),android.graphics.Shader.TileMode.CLAMP));
++            c.drawRect(0,0,CW,CH,p);p.setShader(null);
++            color(Color.WHITE);
++            p.setShader(new android.graphics.RadialGradient(824,325,570,
++                new int[]{Color.argb(44,12,60,108),Color.argb(0,6,19,31)},null,android.graphics.Shader.TileMode.CLAMP));
++            c.drawCircle(824,325,570,p);p.setShader(null);
++            line(c,40,105,1608,105,Color.argb(100,30,126,203),1.5f);
++            line(c,48,714,1600,714,Color.argb(65,27,110,194),1.3f);
++            // Faint neutral floor; no sweeping, flashing glow.
++            line(c,0,898,1648,898,Color.argb(34,20,96,160),2);
++        }
++        private int velocity(){
++            float live = gpsKmh >= 0 && System.currentTimeMillis()-lastGpsTime <= 30000 ? gpsKmh :
++                (obdConnected && obdSpeed >= 0 ? obdSpeed : -1f);
++            return live < 0 ? -1 : Math.round(live);
++        }
++        private int targetOrbColor(){
++            int v=velocity();
++            if(v>=110) return Color.rgb(219,38,58);
++            if(v>=60) return Color.rgb(24,75,205);
++            return Color.rgb(27,194,239);
++        }
++        private int mix(int a,int b,float f){
++            int r=(int)(Color.red(a)+(Color.red(b)-Color.red(a))*f);
++            int g=(int)(Color.green(a)+(Color.green(b)-Color.green(a))*f);
++            int bl=(int)(Color.blue(a)+(Color.blue(b)-Color.blue(a))*f);
++            return Color.rgb(r,g,bl);
++        }
++        private int alpha(int c,int a){ return Color.argb(a,Color.red(c),Color.green(c),Color.blue(c)); }
++        private void orb(Canvas c){
++            final float cx=820f,cy=299f;
++            float now=android.os.SystemClock.uptimeMillis()/1000f;
++            orbColor=mix(orbColor,targetOrbColor(),0.14f);
++            final int vivid=orbColor;
++            float pulse = 1f + .025f*(float)Math.sin(now*2.2);
++            c.save();c.translate(cx,cy);c.scale(pulse,pulse);
++            color(Color.WHITE);
++            p.setShader(new android.graphics.RadialGradient(0,0,196,
++                new int[]{alpha(vivid,95),alpha(vivid,35),Color.TRANSPARENT},
++                new float[]{0,.51f,1},android.graphics.Shader.TileMode.CLAMP));
++            c.drawCircle(0,0,196,p);p.setShader(null);
++            color(alpha(vivid,130));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2f);
++            c.drawCircle(0,0,169,p);
++            color(alpha(vivid,165));p.setStrokeWidth(3f);
++            c.drawArc(new RectF(-170,-170,170,170),now*17f,82,false,p);
++            c.drawArc(new RectF(-170,-170,170,170),now*(-12f)+175,55,false,p);
++            p.setStyle(Paint.Style.FILL);
++            // Electric tendrils: deterministic flowing waves; no random flashing pixels.
++            for(int strand=0;strand<25;strand++){
++                float ang=(float)(Math.PI*2*strand/25f + .085f*Math.sin(now*.28f+strand));
++                android.graphics.Path path=new android.graphics.Path();
++                for(int j=0;j<=10;j++){
++                    float r=10+j*14f;
++                    float jitter=(float)Math.sin(strand*2.11+j*2.79+now*(.7f+(strand%4)*.1f))*11f*j/11f;
++                    float theta=ang+.07f*(float)Math.sin(now+strand)+j*.013f;
++                    float x=(float)Math.cos(theta)*(r+jitter), y=(float)Math.sin(theta)*(r+jitter);
++                    if(j==0)path.moveTo(x,y);else path.lineTo(x,y);
++                }
++                color(alpha(vivid,strand%4==0?205:110));p.setStrokeWidth(strand%3==0?2.2f:1.1f);
++                p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
++                c.drawPath(path,p);p.setStyle(Paint.Style.FILL);
+             }
+-            erase(c,1325,835,1570,882,Color.rgb(4,11,18));
+-            print(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1330,869,31,LIGHT,true);
+-            drawShortcuts(c);
++            color(Color.WHITE);
++            p.setShader(new android.graphics.RadialGradient(0,0,66,
++                new int[]{Color.argb(236,244,250,255),alpha(vivid,209),alpha(vivid,0)},
++                new float[]{0,.30f,1},android.graphics.Shader.TileMode.CLAMP));
++            c.drawCircle(0,0,66,p);p.setShader(null);
+             c.restore();
++            center(c,"N O V A",cx,515,43,Color.rgb(224,239,252),true);
+         }
+-        private void drawShortcuts(Canvas c) {
+-            // Atalhos configuráveis discretos, sem cobrir o Civic.
+-            final float y=678f, w=102f, h=88f;
+-            for(int slot=0;slot<3;slot++){
+-                float x=1276f+slot*115f;
+-                fill.setStyle(Paint.Style.FILL);
+-                fill.setColor(Color.argb(224,3,12,24));
+-                c.drawRoundRect(new RectF(x,y,x+w,y+h),17,17,fill);
+-                fill.setStyle(Paint.Style.STROKE);
+-                fill.setStrokeWidth(1.7f);
+-                fill.setColor(BLUE);
+-                c.drawRoundRect(new RectF(x,y,x+w,y+h),17,17,fill);
+-                fill.setStyle(Paint.Style.FILL);
+-                String pkg=slotPackage(slot), activity=slotActivity(slot);
+-                String label=getSharedPreferences(HOME_PREFS,MODE_PRIVATE).getString("label"+slot,"");
+-                if (pkg.isEmpty()) {
+-                    print(c,"+",x+35,y+46,38,BLUE,true);
+-                    print(c,"ADD",x+34,y+75,16,Color.WHITE,true);
+-                } else {
+-                    try {
+-                        String key=pkg+"/"+activity;
+-                        if(!key.equals(shortcutKeys[slot]) || shortcutIcons[slot]==null){
+-                            shortcutKeys[slot]=key;
+-                            shortcutIcons[slot]=!activity.isEmpty()
+-                                    ? getPackageManager().getActivityIcon(new ComponentName(pkg,activity))
+-                                    : getPackageManager().getApplicationIcon(pkg);
+-                        }
+-                        Drawable icon=shortcutIcons[slot];
+-                        icon.setBounds((int)x+32,(int)y+8,(int)x+70,(int)y+46);
+-                        icon.draw(c);
+-                    } catch (Exception e) { print(c,"▶",x+32,y+46,30,BLUE,true); }
+-                    String shortened=label.length()>10 ? label.substring(0,9)+"…" : label;
+-                    text.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+-                    text.setTextSize(16f);text.setColor(Color.WHITE);
+-                    c.drawText(shortened,x+(w-text.measureText(shortened))/2,y+75,text);
+-                }
++        private void civicWallpaper(Canvas c){
++            if(civic != null){
++                color(Color.WHITE);p.setAlpha(175);
++                c.drawBitmap(civic,null,new RectF(425,128,1223,520),p);
++                p.setAlpha(255);
+             }
++            center(c,"CIVIC",820,515,41,Color.rgb(205,222,243),true);
+         }
+-        @Override public boolean onTouchEvent(MotionEvent e) {
+-            float x=e.getX()*1648/getWidth(), y=e.getY()*928/getHeight();
+-            if (e.getAction()==MotionEvent.ACTION_DOWN) { touchX=x; touchY=y;return true; }
+-            if (e.getAction()==MotionEvent.ACTION_UP) {
+-                if (Math.abs(x-touchX)>55 || Math.abs(y-touchY)>55)return true;
++        private void quietWallpaper(Canvas c){
++            color(Color.WHITE);
++            p.setShader(new android.graphics.RadialGradient(820,300,210,
++                new int[]{Color.argb(110,15,112,199),Color.argb(16,8,60,119),Color.TRANSPARENT},
++                null,android.graphics.Shader.TileMode.CLAMP));
++            c.drawCircle(820,300,210,p);p.setShader(null);
++            color(Color.rgb(19,105,184));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);
++            c.drawCircle(820,300,154,p);p.setStyle(Paint.Style.FILL);
++            center(c,"NOVA",820,515,43,Color.rgb(220,235,252),true);
++        }
++        private void header(Canvas c){
++            color(Color.rgb(227,237,248));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);
++            c.drawRoundRect(new RectF(53,24,117,86),11,11,p);p.setStyle(Paint.Style.FILL);
++            center(c,"H",85,72,47,Color.WHITE,true);
++            txt(c,"CIVIC",150,58,43,Color.rgb(226,240,250),true);
++            txt(c,"DRIVE",314,58,43,Color.rgb(36,194,247),true);
++            txt(c,"G8  ·  2011",153,90,22,Color.rgb(152,174,200),false);
++            java.util.Date date = new java.util.Date();
++            center(c,new java.text.SimpleDateFormat("HH:mm",PT).format(date),1410,55,49,Color.rgb(232,245,255),true);
++            center(c,new java.text.SimpleDateFormat("EEE, dd/MM/yyyy",PT).format(date),1410,88,23,Color.rgb(150,179,210),false);
++            // Settings action, not a duplicate system status bar.
++            line(c,1565,41,1590,41,Color.rgb(160,199,234),4);
++            line(c,1565,52,1590,52,Color.rgb(160,199,234),4);
++            line(c,1565,63,1590,63,Color.rgb(160,199,234),4);
++        }
++        private void gauge(Canvas c,float cx,float cy,boolean temp){
++            final float radius=178;
++            RectF area = new RectF(cx-radius,cy-radius,cx+radius,cy+radius);
++            int idle=Color.rgb(36,67,99),stroke=Color.rgb(27,155,236);
++            color(Color.argb(23,10,29,50));c.drawCircle(cx,cy,radius-13,p);
++            color(idle);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(13);
++            c.drawArc(area,141,259,false,p);
++            double current=temp?coolant:rpm;
++            boolean available=obdConnected && (temp?coolant>-100:rpm>=0);
++            float f=temp ? (float)((current-40)/75d) : (float)(current/8000d);
++            f=Math.max(0f,Math.min(1f,f));
++            color(temp && available && coolant>=105?Color.rgb(244,165,59):stroke);
++            p.setStrokeWidth(15);
++            if(available)c.drawArc(area,141,259*f,false,p);
++            color(Color.rgb(15,51,85));p.setStrokeWidth(1.5f);c.drawCircle(cx,cy,radius+13,p);
++            p.setStyle(Paint.Style.FILL);
++            for(int i=0;i<=8;i++){
++                double a=Math.toRadians(141+259d*i/8);
++                float x1=cx+(float)Math.cos(a)*(radius-33),y1=cy+(float)Math.sin(a)*(radius-33);
++                float x2=cx+(float)Math.cos(a)*(radius-18),y2=cy+(float)Math.sin(a)*(radius-18);
++                line(c,x1,y1,x2,y2,Color.rgb(131,171,210),2);
++            }
++            if(temp){
++                center(c,"ARREFECIMENTO",cx,cy-31,21,Color.rgb(172,203,230),false);
++                center(c,available?coolant+" °C":"— °C",cx,cy+38,62,Color.WHITE,true);
++                center(c,"ECT · MOTOR",cx,cy+85,18,Color.rgb(92,150,198),false);
++            } else {
++                center(c,"ROTAÇÃO",cx,cy-31,21,Color.rgb(172,203,230),false);
++                center(c,available?String.format(PT,"%.1f",rpm/1000d):"—",cx,cy+38,70,Color.WHITE,true);
++                center(c,"RPM × 1000",cx,cy+85,19,Color.rgb(92,150,198),false);
++            }
++        }
++        private void status(Canvas c){
++            RectF area=new RectF(50,573,1598,690);
++            color(Color.argb(120,4,18,34));c.drawRoundRect(area,23,23,p);
++            outline(c,area,23,Color.argb(120,35,119,189),1.6f);
++            line(c,559,593,559,670,Color.rgb(17,68,105),2);
++            line(c,1092,593,1092,670,Color.rgb(17,68,105),2);
++            txt(c,"OBD2",128,621,25,Color.rgb(161,193,218),false);
++            txt(c,obdStatus,128,663,31,obdConnected?Color.rgb(75,205,244):Color.rgb(209,215,229),true);
++            txt(c,"ARREFECIMENTO",638,621,25,Color.rgb(161,193,218),false);
++            txt(c,obdConnected&&coolant>-100 ? coolant+" °C":"— °C",638,663,31,Color.WHITE,true);
++            txt(c,"CONSUMO ESTIMADO",1175,621,25,Color.rgb(161,193,218),false);
++            txt(c,avgKmL>=0 ? String.format(PT,"%.1f km/L",avgKmL):"— km/L",1175,663,31,Color.WHITE,true);
++        }
++        private void icon(Canvas c,int kind,float x,float y,int tint){
++            color(tint);p.setStrokeWidth(4f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);p.setStyle(Paint.Style.STROKE);
++            android.graphics.Path shape=new android.graphics.Path();
++            switch(kind){
++                case 0: // Home
++                    shape.moveTo(x-23,y);shape.lineTo(x,y-24);shape.lineTo(x+23,y);shape.lineTo(x+19,y+24);
++                    shape.lineTo(x+6,y+24);shape.lineTo(x+6,y+6);shape.lineTo(x-6,y+6);shape.lineTo(x-6,y+24);
++                    shape.lineTo(x-19,y+24);shape.close();c.drawPath(shape,p);break;
++                case 1: // Gauge
++                    c.drawArc(new RectF(x-24,y-20,x+24,y+28),190,160,false,p);
++                    c.drawLine(x,y+6,x+17,y-12,p);break;
++                case 2: // Waze / speech
++                    c.drawRoundRect(new RectF(x-23,y-21,x+22,y+15),14,14,p);
++                    c.drawLine(x-6,y+15,x-10,y+23,p);
++                    c.drawCircle(x+10,y-4,2,p);break;
++                case 3: // Radio
++                    c.drawRoundRect(new RectF(x-25,y-15,x+24,y+23),5,5,p);
++                    c.drawLine(x-22,y-17,x+17,y-31,p);c.drawCircle(x+10,y+4,7,p);
++                    c.drawLine(x-18,y-6,x-2,y-6,p);break;
++                case 4: // Add
++                    c.drawLine(x-18,y,x+18,y,p);c.drawLine(x,y-18,x,y+18,p);break;
++                case 5: // Apps
++                    for(int col=-1;col<=1;col++)for(int row=-1;row<=1;row++){
++                        c.drawRoundRect(new RectF(x+col*14-4,y+row*14-4,x+col*14+4,y+row*14+4),2,2,p);
++                    }break;
++                case 6: // Wallpaper
++                    c.drawRoundRect(new RectF(x-25,y-21,x+25,y+22),5,5,p);
++                    shape.moveTo(x-18,y+14);shape.lineTo(x-4,y);shape.lineTo(x+6,y+10);
++                    shape.lineTo(x+14,y+1);shape.lineTo(x+22,y+14);c.drawPath(shape,p);
++                    c.drawCircle(x+14,y-11,4,p);break;
++                case 7: // Nova waveform
++                    shape.moveTo(x-27,y);shape.lineTo(x-15,y);shape.lineTo(x-8,y-15);shape.lineTo(x+1,y+18);
++                    shape.lineTo(x+8,y-16);shape.lineTo(x+16,y);shape.lineTo(x+27,y);c.drawPath(shape,p);break;
++            }
++            p.setStyle(Paint.Style.FILL);
++        }
++        private void dock(Canvas c){
++            for(int i=0;i<dockX.length;i++){
++                float x=dockX[i];int tint=i==0?Color.rgb(45,205,244):Color.rgb(200,219,235);
++                boolean custom=i>=2&&i<=4;
++                String label=dockNames[i];
++                if(custom){
++                    int slot=i-2;
++                    String pkg=slotPackage(slot),activity=slotActivity(slot);
++                    String customLabel=getSharedPreferences(HOME_PREFS,MODE_PRIVATE).getString("label"+slot,"");
++                    if(!pkg.isEmpty()){
++                        label=customLabel.isEmpty()?"Atalho":customLabel;
++                        try{
++                            String key=pkg+"/"+activity;
++                            if(!key.equals(shortcutsNames[slot])||shortcuts[slot]==null){
++                                shortcutsNames[slot]=key;
++                                shortcuts[slot]=activity.isEmpty()?getPackageManager().getApplicationIcon(pkg):getPackageManager().getActivityIcon(new ComponentName(pkg,activity));
++                            }
++                            Drawable icon=shortcuts[slot];icon.setBounds((int)x-25,749,(int)x+25,799);icon.draw(c);
++                        }catch(Exception e){icon(c,i,x,774,tint);}
++                    }else icon(c,i,x,774,tint);
++                }else icon(c,i,x,774,tint);
++                if(label.length()>10)label=label.substring(0,9)+"…";
++                center(c,label,x,851,23,i==0?Color.rgb(62,212,244):Color.rgb(185,204,224),i==0);
++            }
++            line(c,125,875,223,875,Color.rgb(36,196,242),3);
++        }
++        @Override protected void onDraw(Canvas c){
++            super.onDraw(c);c.save();c.scale(getWidth()/CW,getHeight()/CH);
++            glowBackground(c);header(c);
++            if(wallpaper==1)civicWallpaper(c);else if(wallpaper==2)quietWallpaper(c);else orb(c);
++            gauge(c,310,332,true);gauge(c,1336,332,false);
++            status(c);dock(c);
++            c.restore();
++            // Deliberately limit CPU usage on older Android head units.
++            if(animationRunning && wallpaper==0 && getWindowVisibility()==View.VISIBLE)
++                postInvalidateDelayed(75);
++        }
++        @Override public boolean onTouchEvent(MotionEvent e){
++            float x=e.getX()*CW/getWidth(),y=e.getY()*CH/getHeight();
++            if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;downAt=android.os.SystemClock.uptimeMillis();return true;}
++            if(e.getAction()==MotionEvent.ACTION_UP){
++                if(Math.abs(x-downX)>42||Math.abs(y-downY)>42)return true;
+                 performClick();
+-                if (y>674 && y<777 && x>1271 && x<1612) {
+-                    int slot=(int)((x-1276)/115);
+-                    if(slot>=0 && slot<3)openShortcut(slot);
++                if(android.os.SystemClock.uptimeMillis()-downAt>650){
++                    if(y<720){pickWallpaper();return true;}
++                    if(y>730 && x>=400 && x<=1035){
++                        int slot=Math.round((x-542)/184);if(slot>=0&&slot<3)openApplicationCatalog(true,slot);
++                    }
++                    return true;
+                 }
+-                else if (x>1390 && y>216 && y<340) showMenu();
+-                else if (x>1380 && y>410 && y<548) openDashboards();
+-                else if (x>1390 && y>540 && y<660) safeStart(new Intent(MainActivity.this,NovaActivity.class));
+-                else if (y>780 && x<448) chooseObdDevice();
+-                else if (y>780 && x>1155) openDashboards();
++                if(y>731){
++                    int idx=Math.round((x-174)/184);if(idx<0||idx>=dockX.length||Math.abs(x-dockX[idx])>83)return true;
++                    switch(idx){
++                        case 0:break;
++                        case 1:openDashboards();break;
++                        case 2:if(slotPackage(0).isEmpty())openPackage("com.waze");else openShortcut(0);break;
++                        case 3:if(slotPackage(1).isEmpty())openRadio();else openShortcut(1);break;
++                        case 4:openShortcut(2);break;
++                        case 5:showInstalledApps();break;
++                        case 6:pickWallpaper();break;
++                        case 7:safeStart(new Intent(MainActivity.this,NovaActivity.class));break;
++                    }
++                }else if(x>1525 && y<110)showSettings();
++                else if(y>=573 && y<=690 && x<560)chooseObdDevice();
++                else if(y>=573 && y<=690)openDashboards();
++                else if(x>495&&x<1140&&y>110&&y<555)safeStart(new Intent(MainActivity.this,NovaActivity.class));
++                else if(y>130&&y<546)openDashboards();
+                 return true;
+             }
+             return true;
+         }
+-        @Override public boolean performClick() { super.performClick();return true; }
++        @Override public boolean performClick(){super.performClick();return true;}
+     }
+ 
++    private void pickWallpaper(){
++        new AlertDialog.Builder(this).setTitle("Plano de fundo")
++            .setSingleChoiceItems(new String[]{"Nova · esfera animada", "Civic prata", "Nova · azul minimalista"},
++                getSharedPreferences("civic_wallpaper", MODE_PRIVATE).getInt("mode",0),
++                (d,which)->{ if(surface!=null)surface.useWallpaper(which);d.dismiss(); })
++            .setNegativeButton("Cancelar",null).show();
++    }
++    private void openRadio(){
++        for(String pkg:new String[]{"com.android.fmradio","com.microntek.radio","com.ts.MainUI","com.syu.radio","com.android.radio"}){
++            if(getPackageManager().getLaunchIntentForPackage(pkg)!=null){openPackage(pkg);return;}
++        }
++        // OEM radio activities are often not exported. Let the user choose an available app.
++        openApplicationCatalog(true,1);
++    }
+     private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
+     private void showMenu() {
+         final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","Bluetooth","Atualizar pelo GitHub","Ajustes"};
+@@ -360,7 +559,7 @@
+     }
+     private void showSettings() {
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
+-            .setItems(new String[]{"Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre"},
++            .setItems(new String[]{"Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre"},
+                 (d,which)->{
+                     switch(which){
+                         case 0:chooseObdDevice();break;
+@@ -371,10 +570,11 @@
+                             .setNegativeButton("Cancelar",null).setPositiveButton("Zerar",(a,b)->resetTrip()).show();break;
+                         case 4:toggleAutomaticObd();break;
+                         case 5:chooseShortcutSlot();break;
+-                        case 6:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+-                        case 7:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+-                        case 8:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.8")
++                        case 6:pickWallpaper();break;
++                        case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
++                        case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
++                        case 9:requestGps();break;
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
+@@ -498,7 +698,7 @@
+         if(code==REQUEST_GPS&&gpsAllowed())startGps();
+         if(code==REQUEST_BLUETOOTH&&btAllowed())tryAutoObd();
+     }
+-    @Override protected void onResume(){super.onResume();dashboardOpen = false;if(surface!=null)surface.invalidate();if(gpsAllowed())startGps();if(updates!=null)updates.onResume();
++    @Override protected void onResume(){super.onResume();dashboardOpen = false;if(surface!=null){surface.resumeAnimation();}if(gpsAllowed())startGps();if(updates!=null)updates.onResume();
+         if (Build.VERSION.SDK_INT >= 31 && !btAllowed()) {
+             BluetoothManager manager=(BluetoothManager)getSystemService(Context.BLUETOOTH_SERVICE);
+             if (manager!=null && manager.getAdapter()!=null)
