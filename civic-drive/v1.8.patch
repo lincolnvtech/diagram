@@ -151,7 +151,7 @@ diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/AppCatalogActiv
 +        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
 +        TextView back=text("‹  VOLTAR",17,WHITE,true);header.addView(back);back.setPadding(0,0,dp(20),0);back.setOnClickListener(v->finish());
 +        TextView title=text(selectSlot>=0?"ESCOLHER ATALHO  "+(selectSlot+1):"APLICATIVOS DA CENTRAL",21,WHITE,true);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-+        TextView count=text(""+all.size()+" apps",13,SECONDARY,false);header.addView(count);
++        TextView countLabel=text(""+all.size()+" apps",13,SECONDARY,false);header.addView(countLabel);
 +        EditText search=new EditText(this);search.setSingleLine(true);search.setTextColor(WHITE);search.setHintTextColor(SECONDARY);
 +        search.setTextSize(15);search.setHint("Buscar rádio, Waze, música, qualquer aplicativo...");
 +        search.setPadding(dp(16),dp(6),dp(16),dp(6));search.setBackground(outline());
@@ -178,7 +178,7 @@ diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/AppCatalogActiv
 +                String query=s.toString().toLowerCase(new Locale("pt","BR")).trim();visible.clear();
 +                for(ResolveInfo i:all)if(query.isEmpty()||i.loadLabel(pm).toString().toLowerCase(new Locale("pt","BR")).contains(query)
 +                        ||i.activityInfo.packageName.toLowerCase(Locale.ROOT).contains(query))visible.add(i);
-+                adapter.notifyDataSetChanged();count.setText(visible.size()+" apps");
++                adapter.notifyDataSetChanged();countLabel.setText(visible.size()+" apps");
 +            }
 +            @Override public void afterTextChanged(Editable s){}
 +        });
