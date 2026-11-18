@@ -1,0 +1,38 @@
+name: Civic G8 - Exportar codigo restaurado para manutencao
+on:
+  push:
+    branches: [civic-drive-build]
+    paths:
+      - '.github/workflows/civic-source-export.yml'
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: civic-drive-build
+      - name: Restaurar fonte da versao atual
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p source
+          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-source.zip
+          unzip -q /tmp/civic-source.zip -d source
+          for f in v1.6.patch v1.8.patch v1.9.patch v1.9.1.patch; do
+            (cd source && patch --batch -p1 < "../civic-drive/$f")
+          done
+          base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/civic-art.zip
+          unzip -oq /tmp/civic-art.zip -d source
+          test -f source/app/src/main/java/br/com/civicdrive/ObdManager.java
+          test -f source/app/src/main/java/br/com/civicdrive/MainActivity.java
+          (cd source && zip -qr /tmp/civic-source-export.zip .)
+      - name: Exportar fonte
+        uses: actions/upload-artifact@v4
+        with:
+          name: civic-v191-restored-source
+          path: /tmp/civic-source-export.zip
+          retention-days: 2
