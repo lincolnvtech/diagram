@@ -1,4 +1,4 @@
-# Trigger: recompilar v1.8 apos cadastro do segredo permanente no GitHub.
+# Civic G8 v1.9 — atualizacao assinada permanente e esfera Nova reativa.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - 'civic-drive/source-zip.base64'
       - 'civic-drive/v1.6.patch'
       - 'civic-drive/v1.8.patch'
+      - 'civic-drive/v1.9.patch'
       - 'civic-drive/signing.enc.json'
       - '.github/workflows/civic-drive-build.yml'
   workflow_dispatch:
@@ -53,8 +54,9 @@ jobs:
           test -f build-civic/app/build.gradle
           (cd build-civic && patch --batch -p1 < ../civic-drive/v1.6.patch)
           (cd build-civic && patch --batch -p1 < ../civic-drive/v1.8.patch)
-          grep -q "versionCode 9" build-civic/app/build.gradle
-          grep -q "versionName '1.8.0'" build-civic/app/build.gradle
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.patch)
+          grep -q "versionCode 10" build-civic/app/build.gradle
+          grep -q "versionName '1.9.0'" build-civic/app/build.gradle
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -91,7 +93,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v1.8.apk'
+          signed = root/'civic-drive/civic-drive-v1.9.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -113,7 +115,7 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v1.8 validado com assinatura permanente.')
+          print('APK v1.9 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
@@ -123,16 +125,16 @@ jobs:
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":9,"versionName":"1.8.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.8.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":10,"versionName":"1.9.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.8.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add civic-drive/civic-drive-v1.8.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic G8 1.7 assinatura permanente'
+            git commit -m 'build: Civic G8 1.9 esfera Nova reativa'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.8-release
+          name: civic-g8-v1.9-release
           path: civic-drive/civic-drive-v1.8.apk
