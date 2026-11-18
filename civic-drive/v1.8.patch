@@ -1,0 +1,1011 @@
+diff -ruN civic_v18_baseline/README.md civic_v18_work/README.md
+--- civic_v18_baseline/README.md	2026-11-18 13:49:43.114765110 +0000
++++ civic_v18_work/README.md	2026-11-18 13:48:13.987671262 +0000
+@@ -1,4 +1,4 @@
+-# Civic G8 — Launcher independente v1.6
++# Civic G8 — Launcher independente v1.8
+ 
+ Projeto Android nativo (Java) para multimídia Android do Honda Civic G8 2011. **Não é o Rota Launcher** nem modificação dele. A arte de referência aprovada é `app/src/main/res/drawable-nodpi/civic_ui_compacto.webp`.
+ 
+@@ -26,9 +26,9 @@
+ 
+ ```json
+ {
+-  "versionCode": 7,
+-  "versionName": "1.6.0",
+-  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.6.apk",
++  "versionCode": 9,
++  "versionName": "1.8.0",
++  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.8.apk",
+   "sha256": "SHA256_REAL_DO_APK_DEPOIS_DA_COMPILACAO"
+ }
+ ```
+@@ -43,15 +43,27 @@
+ - Não colocar token Nova embutido em APK ou GitHub.
+ - As imagens ilustram o Civic G8, não comprovam equipamento específico do carro.
+ 
+-## Alterações da v1.6
++## Alterações da v1.8
+ - Retirados do cabeçalho do wallpaper o nome CIVIC G8, relógio e ícones duplicados; preservada a logo Honda e todo o restante do visual.
+ - OBD2 reconecta automaticamente ao ELM327 previamente selecionado; no primeiro uso seleciona sozinho apenas quando houver um único adaptador OBD pareado, evitando escolha equivocada. OBD2 continua podendo ser selecionado no menu.
+ - Ao abrir o launcher tenta reconectar o adaptador; após desconexão faz novas tentativas com intervalo, sem necessidade de tocar no indicador.
+ - Bloco Motor passou a Arrefecimento, com valor ECT de PID 0105 e barra discreta, sem inventar temperatura sem leitura.
+-- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.6 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
++- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.8 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
+ 
+-## Alterações da v1.6
++## Alterações da v1.8
+ - Dashboards ganhou MAP 010B, carga calculada 0104, temperatura de admissão 010F e correção curta de combustível STFT banco 1 0106.
+ - Sensores avançados lidos em rodízio, um por ciclo, sem modificar ECU e sem alterar a home.
+ - Sensores não suportados apresentam traço, sem valor simulado.
+ - Ainda requer assinatura digital permanente via GitHub Actions Secrets para atualizar instalações anteriores sem desinstalar.
++
++## Novidades v1.8
++- Atalhos personalizáveis na HOME: 3 posições, qualquer atividade Android visível. Toque em + para escolher Rádio/Waze/outro. Menu → Adicionar atalho permite substituir.
++- Catálogo de apps com busca e **ícones originais** dos aplicativos instalados. Alguns apps de fábrica sem atividade LAUNCHER exportada não podem ser abertos por apps externos.
++- Dashboards com medidores digitais, detalhamento por toque, filtros e alertas preventivos em âmbar (limites exemplificativos, não diagnóstico).
++- Diagnóstico OBD2: leitura dos modos 03, 07, 0A pelo ELM327 já conectado; **NÃO há comando para apagar códigos (modo 04)**. Nem todas as ECUs aceitam modo 0A.
++- Memória offline privada: uma amostra de sensores por minuto enquanto ELM327 conectado; arquivo JSONL limitado, sem VIN/GPS exato. Histórico consultável/compartilhável com confirmação. Sem envio automático de telemetria.
++- NOVA: botão DADOS DO CIVIC prepara um resumo para enviar explicitamente ao endpoint HTTPS autenticado configurado na tela da Nova. **O servidor Nova Total não possui nesta versão endpoint de ingestão/histórico do Civic: a persistência central remota ainda não existe**.
++- Versão 9 / 1.8.0; release deve ser assinada com o mesmo certificado permanente da v1.7. NÃO gerar APK com chave debug diferente.
++
++### Contrato futuro de integração Nova Total (a implementar no servidor)
++`POST /api/civic/telemetry` com Authorization Bearer, Content-Type application/json e corpo {source:'civic_drive',vehicle:'Civic G8 2011',sample_period_seconds:60,samples:[...]}. Exigir HTTPS, token individual, rate limit, schema e limites de tamanho, persistência isolada e retenção definida. Não expor Ollama diretamente nem colocar token no código ou GitHub. Na v1.8 o usuário exporta dados manualmente ou envia RESUMO pela tela de chat já existente.
+diff -ruN civic_v18_baseline/app/build.gradle civic_v18_work/app/build.gradle
+--- civic_v18_baseline/app/build.gradle	2026-11-16 20:32:11.000000000 +0000
++++ civic_v18_work/app/build.gradle	2026-11-18 13:47:59.205437819 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 7
+-        versionName '1.6.0'
++        versionCode 9
++        versionName '1.8.0'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN civic_v18_baseline/app/src/main/AndroidManifest.xml civic_v18_work/app/src/main/AndroidManifest.xml
+--- civic_v18_baseline/app/src/main/AndroidManifest.xml	2026-11-16 00:21:52.000000000 +0000
++++ civic_v18_work/app/src/main/AndroidManifest.xml	2026-11-18 13:44:19.888410030 +0000
+@@ -3,6 +3,8 @@
+     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+     <uses-permission android:name="android.permission.INTERNET" />
++    <!-- Necessário para launcher independente listar aplicativos da central (inclusive sistema) -->
++    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+@@ -40,6 +42,9 @@
+             </intent-filter>
+         </activity>
+         <activity android:name=".DashboardActivity" android:exported="false" android:screenOrientation="landscape" />
++        <activity android:name=".AppCatalogActivity" android:exported="false" android:screenOrientation="landscape" />
++        <activity android:name=".FaultCodesActivity" android:exported="false" android:screenOrientation="landscape" />
++        <activity android:name=".CarHistoryActivity" android:exported="false" android:screenOrientation="landscape" />
+         <activity android:name=".NovaActivity" android:exported="false" android:screenOrientation="unspecified" android:windowSoftInputMode="adjustResize" />
+     </application>
+ </manifest>
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/AppCatalogActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/AppCatalogActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/AppCatalogActivity.java	1970-01-01 00:00:00.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/AppCatalogActivity.java	2026-11-18 13:44:56.255164828 +0000
+@@ -0,0 +1,129 @@
++package br.com.civicdrive;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.ComponentName;
++import android.content.Intent;
++import android.content.pm.PackageManager;
++import android.content.pm.ResolveInfo;
++import android.graphics.Color;
++import android.graphics.Typeface;
++import android.graphics.drawable.GradientDrawable;
++import android.os.Bundle;
++import android.text.Editable;
++import android.text.TextWatcher;
++import android.view.Gravity;
++import android.view.View;
++import android.widget.ArrayAdapter;
++import android.widget.BaseAdapter;
++import android.widget.EditText;
++import android.widget.GridView;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++import android.widget.Toast;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.List;
++import java.util.Locale;
++
++/** Catálogo de todas as atividades launchable com seus próprios ícones. */
++public final class AppCatalogActivity extends Activity {
++    private final List<ResolveInfo> all = new ArrayList<>();
++    private final List<ResolveInfo> visible = new ArrayList<>();
++    private PackageManager pm;
++    private AppsAdapter adapter;
++    private int selectSlot = -1;
++    private static final int WHITE=Color.WHITE, SECONDARY=Color.rgb(152,179,205), BLUE=Color.rgb(32,140,254);
++
++    @Override public void onCreate(Bundle state) {
++        super.onCreate(state);
++        getWindow().getDecorView().setSystemUiVisibility(5894);
++        selectSlot=getIntent().getIntExtra("select_slot",-1);
++        pm=getPackageManager();
++        Intent probe=new Intent(Intent.ACTION_MAIN);probe.addCategory(Intent.CATEGORY_LAUNCHER);
++        try {
++            List<ResolveInfo> found=pm.queryIntentActivities(probe,0);
++            for(ResolveInfo info:found) {
++                if(info.activityInfo!=null&&!getPackageName().equals(info.activityInfo.packageName)
++                        && info.activityInfo.exported && info.loadLabel(pm)!=null) all.add(info);
++            }
++        } catch(Exception ignored) { }
++        Collections.sort(all,Comparator.comparing(a->a.loadLabel(pm).toString().toLowerCase(new Locale("pt","BR"))));
++        visible.addAll(all);
++        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
++        root.setPadding(dp(17),dp(11),dp(17),dp(12));root.setBackgroundColor(Color.rgb(3,9,18));
++        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
++        TextView back=text("‹  VOLTAR",17,WHITE,true);header.addView(back);back.setPadding(0,0,dp(20),0);back.setOnClickListener(v->finish());
++        TextView title=text(selectSlot>=0?"ESCOLHER ATALHO  "+(selectSlot+1):"APLICATIVOS DA CENTRAL",21,WHITE,true);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
++        TextView count=text(""+all.size()+" apps",13,SECONDARY,false);header.addView(count);
++        EditText search=new EditText(this);search.setSingleLine(true);search.setTextColor(WHITE);search.setHintTextColor(SECONDARY);
++        search.setTextSize(15);search.setHint("Buscar rádio, Waze, música, qualquer aplicativo...");
++        search.setPadding(dp(16),dp(6),dp(16),dp(6));search.setBackground(outline());
++        LinearLayout.LayoutParams searchP=new LinearLayout.LayoutParams(-1,dp(48));searchP.setMargins(0,dp(13),0,dp(10));root.addView(search,searchP);
++        GridView grid=new GridView(this);grid.setNumColumns(getResources().getDisplayMetrics().widthPixels>850?6:4);
++        grid.setVerticalSpacing(dp(9));grid.setHorizontalSpacing(dp(9));grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
++        adapter=new AppsAdapter();grid.setAdapter(adapter);root.addView(grid,new LinearLayout.LayoutParams(-1,0,1));
++        TextView note=text(selectSlot>=0?"Toque no app para fixar o atalho na home. Segure na home para reorganizar pelo menu.":
++                "Toque para abrir. Segure um aplicativo para adicionar à tela inicial.",12,SECONDARY,false);
++        note.setPadding(0,dp(9),0,0);root.addView(note);
++        grid.setOnItemClickListener((parent,view,index,id)->{
++            ResolveInfo item=visible.get(index);
++            if(selectSlot>=0)pin(item,selectSlot);else launch(item);
++        });
++        grid.setOnItemLongClickListener((parent,view,index,id)->{
++            ResolveInfo item=visible.get(index);
++            new AlertDialog.Builder(this).setTitle("Adicionar atalho: "+item.loadLabel(pm))
++                    .setItems(new String[]{"Posição 1","Posição 2","Posição 3"},(d,slot)->pin(item,slot))
++                    .setNegativeButton("Cancelar",null).show();return true;
++        });
++        search.addTextChangedListener(new TextWatcher(){
++            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
++            @Override public void onTextChanged(CharSequence s,int start,int before,int count){
++                String query=s.toString().toLowerCase(new Locale("pt","BR")).trim();visible.clear();
++                for(ResolveInfo i:all)if(query.isEmpty()||i.loadLabel(pm).toString().toLowerCase(new Locale("pt","BR")).contains(query)
++                        ||i.activityInfo.packageName.toLowerCase(Locale.ROOT).contains(query))visible.add(i);
++                adapter.notifyDataSetChanged();count.setText(visible.size()+" apps");
++            }
++            @Override public void afterTextChanged(Editable s){}
++        });
++        setContentView(root);
++    }
++    private void pin(ResolveInfo app,int slot){
++        if(slot<0||slot>2)return;
++        boolean ok=getSharedPreferences("civic_shortcuts",MODE_PRIVATE).edit()
++                .putString("pkg"+slot,app.activityInfo.packageName)
++                .putString("activity"+slot,app.activityInfo.name)
++                .putString("label"+slot,app.loadLabel(pm).toString()).commit();
++        Toast.makeText(this,ok?"Atalho adicionado à tela inicial":"Não foi possível salvar",Toast.LENGTH_SHORT).show();
++        if(ok)finish();
++    }
++    private void launch(ResolveInfo app) {
++        try {Intent i=new Intent(Intent.ACTION_MAIN);i.addCategory(Intent.CATEGORY_LAUNCHER);
++            i.setComponent(new ComponentName(app.activityInfo.packageName,app.activityInfo.name));i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);
++        } catch(Exception ex) {Toast.makeText(this,"Este aplicativo não permite abertura externa.",Toast.LENGTH_LONG).show();}
++    }
++    private final class AppsAdapter extends BaseAdapter {
++        @Override public int getCount(){return visible.size();}
++        @Override public Object getItem(int i){return visible.get(i);}
++        @Override public long getItemId(int i){return i;}
++        @Override public View getView(int position,View convertView,android.view.ViewGroup parent){
++            ResolveInfo app=visible.get(position);
++            LinearLayout tile=new LinearLayout(AppCatalogActivity.this);tile.setGravity(Gravity.CENTER);tile.setOrientation(LinearLayout.VERTICAL);
++            tile.setPadding(dp(5),dp(9),dp(5),dp(6));tile.setBackground(outline());
++            ImageView image=new ImageView(AppCatalogActivity.this);
++            try {image.setImageDrawable(app.loadIcon(pm));}catch(Exception ignored){}
++            tile.addView(image,new LinearLayout.LayoutParams(dp(39),dp(39)));
++            TextView name=text(app.loadLabel(pm).toString(),12,WHITE,false);
++            name.setMaxLines(2);name.setGravity(Gravity.CENTER);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
++            LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,dp(36));np.topMargin=dp(7);tile.addView(name,np);
++            tile.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,dp(104)));
++            return tile;
++        }
++    }
++    private GradientDrawable outline(){GradientDrawable d=new GradientDrawable();d.setColor(Color.rgb(12,23,39));d.setCornerRadius(dp(13));d.setStroke(dp(1),Color.rgb(30,86,156));return d;}
++    private TextView text(String v,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(v);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
++    private int dp(float n){return (int)(getResources().getDisplayMetrics().density*n+.5f);}
++}
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/CarHistoryActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/CarHistoryActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/CarHistoryActivity.java	1970-01-01 00:00:00.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/CarHistoryActivity.java	2026-11-18 13:45:37.292048159 +0000
+@@ -0,0 +1,37 @@
++package br.com.civicdrive;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Intent;
++import android.graphics.Color;
++import android.os.Bundle;
++import android.view.Gravity;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++/** Dados guardados offline. A exportação só acontece após toque explícito do usuário. */
++public final class CarHistoryActivity extends Activity {
++    @Override public void onCreate(Bundle state){super.onCreate(state);setTitle("Civic · Histórico local");
++        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(3,9,18));root.setPadding(24,16,24,18);
++        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
++        TextView back=label("‹  VOLTAR",16);header.addView(back);back.setOnClickListener(v->finish());
++        TextView title=label("  HISTÓRICO DO CIVIC",22);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
++        TextView export=label("EXPORTAR DADOS",13);export.setPadding(20,10,0,10);header.addView(export);export.setOnClickListener(v->export());
++        ScrollView scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
++        TextView info=label(TelemetryArchive.localSummary(this),18);info.setPadding(18,22,18,20);scroll.addView(info);
++        TextView clear=label("APAGAR HISTÓRICO LOCAL",13);clear.setGravity(Gravity.CENTER);root.addView(clear);
++        clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Apagar histórico do Civic?")
++                .setMessage("Apaga amostras e último resultado de falhas guardados nesta central. Não altera a ECU.")
++                .setNegativeButton("Cancelar",null).setPositiveButton("Apagar",(d,w)->{TelemetryArchive.clear(this);info.setText("Histórico local apagado.");}).show());
++        setContentView(root);
++    }
++    private void export(){new AlertDialog.Builder(this).setTitle("Compartilhar telemetria?")
++            .setMessage("Exporta manualmente os dados do carro em JSON. Não inclui localização exata nem VIN. Confirme o aplicativo destinatário antes de enviar.")
++            .setNegativeButton("Cancelar",null).setPositiveButton("Compartilhar",(d,w)->{
++                Intent intent=new Intent(Intent.ACTION_SEND);intent.setType("text/plain");
++                intent.putExtra(Intent.EXTRA_TEXT,TelemetryArchive.exportJson(this));
++                startActivity(Intent.createChooser(intent,"Compartilhar histórico do Civic"));
++            }).show();}
++    private TextView label(String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextColor(Color.WHITE);t.setTextSize(size);return t;}
++}
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/DashboardActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-16 20:32:11.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-18 13:48:44.960109957 +0000
+@@ -1,8 +1,13 @@
+ package br.com.civicdrive;
+ 
+ import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Intent;
+ import android.content.SharedPreferences;
++import android.graphics.Canvas;
+ import android.graphics.Color;
++import android.graphics.Paint;
++import android.graphics.RectF;
+ import android.graphics.Typeface;
+ import android.graphics.drawable.GradientDrawable;
+ import android.os.Bundle;
+@@ -13,69 +18,131 @@
+ import android.widget.LinearLayout;
+ import android.widget.ScrollView;
+ import android.widget.TextView;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.Locale;
+ 
+-/** Painel secundário: somente medições disponíveis; sem dados demonstrativos falsos. */
++/** Medidores interativos; dados em tempo real do GPS/ELM327, sem simulação. */
+ public final class DashboardActivity extends Activity {
+-    private static final int BG=Color.rgb(4,9,16), BLUE=Color.rgb(26,116,255);
+-    private static final int MUTE=Color.rgb(142,162,182);
++    private static final int BG=Color.rgb(3,9,18), BLUE=Color.rgb(33,136,248), CYAN=Color.rgb(31,190,253), LIGHT=Color.WHITE,
++            GRAY=Color.rgb(146,170,198), WARN=Color.rgb(255,180,58);
+     private final Handler handler=new Handler(Looper.getMainLooper());
+-    private TextView rpm, temp, volts, speed, consume, fuel, trip, state, map, load, iat, trim;
+-    private final Runnable tick=new Runnable(){@Override public void run(){update();handler.postDelayed(this,1200);}};
+-    @Override public void onCreate(Bundle stateBundle){
+-        super.onCreate(stateBundle);
++    private final List<GaugeTile> tiles=new ArrayList<>();
++    private LinearLayout content;
++    private TextView connection;
++    private String category="GERAL";
++    private final Runnable tick=new Runnable(){@Override public void run(){refresh();handler.postDelayed(this,1300);}};
++
++    private static final class Spec {
++        final String key,title,unit,category,info;
++        final float min,max;
++        Spec(String key,String title,String unit,String category,float min,float max,String info){
++            this.key=key;this.title=title;this.unit=unit;this.category=category;this.min=min;this.max=max;this.info=info;
++        }
++    }
++    private static final Spec[] SPECS={
++        new Spec("gps","VELOCIDADE GPS","km/h","GERAL",0,180,"Velocidade calculada pelo GPS da central. Depende da antena e de sinal válido."),
++        new Spec("rpm","ROTAÇÃO","rpm","MOTOR",0,8000,"Rotação de motor, OBD2 PID 010C. Para evitar distrações, consulte com o carro parado."),
++        new Spec("temp","ARREFECIMENTO","°C","MOTOR",40,120,"Temperatura do líquido de arrefecimento (ECT), OBD2 PID 0105. Acima de 105 °C há aviso preventivo; compare com o painel original."),
++        new Spec("volts","TENSÃO ELM327","V","MOTOR",10,16,"Tensão relatada pelo adaptador ELM327, não leitura direta no terminal da bateria."),
++        new Spec("kmL","MÉDIA ESTIMADA","km/L","CONSUMO",0,25,"Cálculo estimado a partir de combustível e deslocamento; depende dos sensores e pode ter erro relevante."),
++        new Spec("fuelRate","CONSUMO INSTANTÂNEO","L/h","CONSUMO",0,20,"Vazão aproximada: PID 015E ou estimativa por MAF 0110 e parâmetros de gasolina."),
++        new Spec("mapKpa","PRESSÃO MAP","kPa","MOTOR",0,110,"Pressão absoluta no coletor de admissão, PID 010B."),
++        new Spec("engineLoad","CARGA MOTOR","%","MOTOR",0,100,"Carga calculada pela ECU, PID 0104."),
++        new Spec("intakeTemp","TEMP. ADMISSÃO","°C","MOTOR",-20,90,"Temperatura do ar de admissão, PID 010F."),
++        new Spec("stft","AJUSTE STFT","%","MOTOR",-35,35,"Correção de combustível de curto prazo, banco 1, PID 0106. Valores extremos precisam de análise profissional."),
++        new Spec("tripKm","DISTÂNCIA DA VIAGEM","km","CONSUMO",0,100,"Distância acumulada localmente desde a última redefinição; não é hodômetro do carro.")
++    };
++
++    @Override public void onCreate(Bundle b){super.onCreate(b);
+         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(BG);
+-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(25),dp(14),dp(25),dp(16));
+-        scroll.addView(root);
+-        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);root.addView(header);
+-        TextView back=txt("‹  VOLTAR",16,Color.WHITE,true);back.setPadding(dp(8),dp(8),dp(28),dp(8));header.addView(back);
+-        back.setOnClickListener(v->finish());
+-        TextView title=txt("DASHBOARDS   /   CIVIC G8",23,Color.WHITE,true);header.addView(title);
+-        TextView note=txt("Dados em tempo real quando disponíveis · consumo estimado, não aferido",12,MUTE,false);
+-        note.setPadding(0,dp(9),0,dp(14));root.addView(note);
+-        state=txt("OBD2: desconectado",16,BLUE,true);root.addView(state);
+-        LinearLayout line1=new LinearLayout(this);line1.setPadding(0,dp(14),0,dp(8));root.addView(line1);
+-        speed=metric(line1,"VELOCIDADE GPS","— km/h");rpm=metric(line1,"ROTAÇÃO DO MOTOR","— rpm");temp=metric(line1,"ARREFECIMENTO (ECT)","— °C");
+-        LinearLayout line2=new LinearLayout(this);line2.setPadding(0,dp(8),0,dp(8));root.addView(line2);
+-        volts=metric(line2,"TENSÃO ELM327","— V");consume=metric(line2,"CONSUMO MÉDIO EST.","— km/L");fuel=metric(line2,"CONSUMO INSTANTÂNEO EST.","— L/h");
+-        LinearLayout line3=new LinearLayout(this);line3.setPadding(0,dp(8),0,dp(8));root.addView(line3);
+-        map=metric(line3,"PRESSÃO DO COLETOR (MAP)","— kPa");
+-        load=metric(line3,"CARGA DO MOTOR","— %");
+-        iat=metric(line3,"TEMP. DE ADMISSÃO (IAT)","— °C");
+-        LinearLayout line4=new LinearLayout(this);line4.setPadding(0,dp(8),0,dp(8));root.addView(line4);
+-        trim=metric(line4,"CORREÇÃO DE COMBUSTÍVEL (STFT)","— %");
+-        trip=metric(line4,"DISTÂNCIA COMPUTADA NA VIAGEM","— km");
+-        TextView foot=txt("ℹ  Nem todos os ECUs fornecem todos os sensores. MAP, IAT, carga e STFT são leituras OBD2; o consumo é estimado. Dados indisponíveis aparecem como —. Não utilize o aplicativo para decisões críticas de condução.",12,MUTE,false);
+-        foot.setPadding(0,dp(14),0,0);root.addView(foot);
++        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(17),dp(10),dp(17),dp(15));scroll.addView(root);
++        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);root.addView(head);
++        TextView back=text("‹  VOLTAR",15,LIGHT,true);back.setPadding(dp(5),dp(8),dp(20),dp(8));back.setOnClickListener(v->finish());head.addView(back);
++        TextView title=text("DASHBOARDS  /  CIVIC G8",20,LIGHT,true);head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
++        TextView faults=text("LER FALHAS",13,CYAN,true);faults.setPadding(dp(14),dp(8),dp(15),dp(8));faults.setOnClickListener(v->startActivity(new Intent(this,FaultCodesActivity.class)));head.addView(faults);
++        TextView history=text("HISTÓRICO",13,CYAN,true);history.setPadding(dp(14),dp(8),dp(5),dp(8));history.setOnClickListener(v->startActivity(new Intent(this,CarHistoryActivity.class)));head.addView(history);
++        connection=text("OBD2: sem dados",13,GRAY,false);connection.setPadding(0,dp(8),0,dp(10));root.addView(connection);
++        LinearLayout categories=new LinearLayout(this);categories.setGravity(Gravity.CENTER_VERTICAL);root.addView(categories);
++        for(String tab:new String[]{"GERAL","MOTOR","CONSUMO"}){
++            TextView choice=text(tab,13,CYAN,true);choice.setGravity(Gravity.CENTER);choice.setPadding(dp(15),dp(11),dp(15),dp(11));
++            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);cp.setMargins(dp(4),0,dp(4),0);categories.addView(choice,cp);
++            choice.setBackground(outline());choice.setOnClickListener(v->{category=tab;updateVisibility();});
++        }
++        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
++        for(int i=0;i<SPECS.length;i+=3){
++            LinearLayout row=new LinearLayout(this);row.setPadding(0,dp(5),0,dp(5));content.addView(row);
++            for(int k=i;k<Math.min(i+3,SPECS.length);k++){
++                GaugeTile g=new GaugeTile(SPECS[k]);tiles.add(g);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(133),1);
++                p.setMargins(dp(4),0,dp(4),0);row.addView(g,p);
++            }
++        }
++        TextView note=text("Leituras OBD2/GPS, com possíveis atrasos. Azul = normal; âmbar = aviso preventivo, não diagnóstico. Nenhuma falha é apagada. Não opere o aplicativo dirigindo.",12,GRAY,false);
++        note.setPadding(dp(3),dp(10),dp(3),dp(2));root.addView(note);
+         setContentView(scroll);
++        updateVisibility();refresh();
+     }
+-    private TextView metric(LinearLayout parent,String label,String value){
+-        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(17),dp(12),dp(12),dp(15));
+-        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.rgb(10,23,39),Color.rgb(5,12,24)});
+-        bg.setCornerRadius(dp(14));bg.setStroke(dp(1),Color.rgb(27,76,143));box.setBackground(bg);
+-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,dp(103),1);params.setMargins(dp(5),0,dp(5),0);parent.addView(box,params);
+-        box.addView(txt(label,11,MUTE,true));TextView data=txt(value,30,Color.WHITE,true);data.setPadding(0,dp(7),0,0);box.addView(data);return data;
+-    }
+-    private TextView txt(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
+-    private int dp(int x){return (int)(getResources().getDisplayMetrics().density*x+.5f);}
+-    private void update(){
++    private void updateVisibility(){
++        for(GaugeTile t:tiles)t.setVisibility(category.equals("GERAL")||category.equals(t.spec.category)||t.spec.key.equals("rpm")||t.spec.key.equals("temp")?View.VISIBLE:View.GONE);
++        // A composição original não agrupa linhas por categoria: os espaços vazios são evitados pela rolagem.
++    }
++    private void refresh(){
+         SharedPreferences p=getSharedPreferences("civic_telemetry",MODE_PRIVATE);
+-        long updated=p.getLong("lastUpdate",0);boolean fresh=System.currentTimeMillis()-updated<18000;
++        boolean fresh=System.currentTimeMillis()-p.getLong("lastUpdate",0)<18000;
+         boolean online=fresh&&p.getBoolean("connected",false);
+-        state.setText(online?"OBD2: conectado · ELM327":"OBD2: desconectado / sem dados recentes");
+-        float v=p.getFloat("gps",-1f);speed.setText(fresh&&v>=0?String.format(Locale.getDefault(),"%.0f km/h",v):"— km/h");
+-        v=p.getFloat("rpm",-1);rpm.setText(online&&v>=0?String.format(Locale.getDefault(),"%.0f rpm",v):"— rpm");
+-        int ct=p.getInt("temp",-999);temp.setText(online&&ct>-100?ct+" °C":"— °C");
+-        v=p.getFloat("volts",-1);volts.setText(online&&v>0?String.format(Locale.getDefault(),"%.1f V",v):"— V");
+-        v=p.getFloat("kmL",-1);consume.setText(online&&v>0?String.format(Locale.getDefault(),"%.1f km/L",v):"— km/L");
+-        v=p.getFloat("fuelRate",-1);fuel.setText(online&&v>=0?String.format(Locale.getDefault(),"%.2f L/h",v):"— L/h");
+-        v=p.getFloat("mapKpa",-1);map.setText(online&&v>=0?String.format(Locale.getDefault(),"%.0f kPa",v):"— kPa");
+-        v=p.getFloat("engineLoad",-1);load.setText(online&&v>=0?String.format(Locale.getDefault(),"%.0f %%",v):"— %");
+-        v=p.getFloat("intakeTemp",-999);iat.setText(online&&v>-100?String.format(Locale.getDefault(),"%.0f °C",v):"— °C");
+-        v=p.getFloat("stft",-999);trim.setText(online&&v>-200?String.format(Locale.getDefault(),"%+.1f %%",v):"— %");
+-        v=p.getFloat("tripKm",0);trip.setText(v>0?String.format(Locale.getDefault(),"%.2f km",v):"— km");
++        connection.setText(online?"● ELM327 CONECTADO · leituras ao vivo":"○ ELM327 DESCONECTADO · sensores indisponíveis");
++        connection.setTextColor(online?CYAN:GRAY);
++        float currentRpm=p.getFloat("rpm",-1);
++        for(GaugeTile tile:tiles){
++            Spec s=tile.spec;float value=-9999;
++            if(s.key.equals("temp")){
++                int c=p.getInt("temp",-999);if(online&&c>-100)value=c;
++            }else if(s.key.equals("gps")){
++                if(fresh)value=p.getFloat("gps",-1);
++            }else if(s.key.equals("tripKm")){
++                value=p.getFloat("tripKm",-1);
++            }else if(online){value=p.getFloat(s.key,-9999);}
++            if(value < -900 || (value<0&&!s.key.equals("intakeTemp")&&!s.key.equals("stft")))value=-9999;
++            boolean warning=online&&((s.key.equals("temp")&&value>=105) ||
++                    (s.key.equals("volts")&&currentRpm>600&&(value<12||value>15.2)) ||
++                    (s.key.equals("stft")&&(value>25||value< -25)));
++            tile.setReading(value,warning);
++        }
++    }
++    private final class GaugeTile extends LinearLayout {
++        final Spec spec;final MeterArc arc;final TextView reading,status;
++        GaugeTile(Spec spec){super(DashboardActivity.this);this.spec=spec;setOrientation(LinearLayout.VERTICAL);setPadding(dp(11),dp(6),dp(10),dp(7));setBackground(outline());setGravity(Gravity.CENTER_VERTICAL);
++            TextView label=text(spec.title,11,GRAY,true);addView(label);
++            LinearLayout inline=new LinearLayout(DashboardActivity.this);inline.setGravity(Gravity.CENTER_VERTICAL);addView(inline,new LayoutParams(-1,0,1));
++            reading=text("— "+spec.unit,21,LIGHT,true);inline.addView(reading,new LayoutParams(0,-2,1));
++            arc=new MeterArc();inline.addView(arc,new LayoutParams(dp(95),dp(60)));
++            status=text("Aguardando sinal",11,GRAY,false);addView(status);
++            setOnClickListener(v->new AlertDialog.Builder(DashboardActivity.this).setTitle(spec.title)
++                    .setMessage(spec.info+"\n\nLeitura atual: "+reading.getText()+"\nEstado: "+status.getText())
++                    .setPositiveButton("Fechar",null).show());
++        }
++        void setReading(float value,boolean warning){
++            if(value<=-900){reading.setText("— "+spec.unit);status.setText("Sem leitura");status.setTextColor(GRAY);arc.setValue(-1,BLUE);return;}
++            reading.setText(String.format(new Locale("pt","BR"),Math.abs(value)>=100?"%.0f %s":"%.1f %s",value,spec.unit));
++            status.setText(warning?"⚠ Verifique": "Toque para detalhes");status.setTextColor(warning?WARN:GRAY);
++            arc.setValue((value-spec.min)/(spec.max-spec.min),warning?WARN:CYAN);
++        }
++    }
++    private final class MeterArc extends View {
++        private final Paint p=new Paint(3);private float fraction=-1;private int shade=CYAN;
++        MeterArc(){super(DashboardActivity.this);}
++        void setValue(float f,int color){fraction=f;shade=color;invalidate();}
++        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight();float pad=dp(7);
++            RectF area=new RectF(pad,pad,w-pad,h*1.6f);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(6));p.setStrokeCap(Paint.Cap.ROUND);
++            p.setColor(Color.rgb(30,51,82));c.drawArc(area,190,160,false,p);
++            if(fraction>=0){p.setColor(shade);c.drawArc(area,190,160*Math.min(1,Math.max(0,fraction)),false,p);}
++            p.setStyle(Paint.Style.FILL);
++        }
+     }
++    private GradientDrawable outline(){GradientDrawable d=new GradientDrawable();d.setColor(Color.rgb(8,19,33));d.setCornerRadius(dp(13));d.setStroke(dp(1),Color.rgb(22,73,131));return d;}
++    private TextView text(String label,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(label);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
++    private int dp(float n){return (int)(getResources().getDisplayMetrics().density*n+0.5f);}
+     @Override protected void onResume(){super.onResume();handler.post(tick);}
+     @Override protected void onPause(){handler.removeCallbacks(tick);super.onPause();}
+ }
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/FaultCodesActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/FaultCodesActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/FaultCodesActivity.java	1970-01-01 00:00:00.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/FaultCodesActivity.java	2026-11-18 13:46:23.204020798 +0000
+@@ -0,0 +1,56 @@
++package br.com.civicdrive;
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.graphics.Color;
++import android.graphics.Typeface;
++import android.os.Bundle;
++import android.view.Gravity;
++import android.widget.LinearLayout;
++import android.widget.TextView;
++import android.widget.ScrollView;
++import java.text.DateFormat;
++import java.util.Date;
++
++/** Lê DTCs via a conexão OBD2 existente, SEM comandos de apagar falhas. */
++public final class FaultCodesActivity extends Activity {
++    private TextView result,refresh;
++    private boolean running;
++    @Override public void onCreate(Bundle b){super.onCreate(b);
++        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
++        root.setPadding(25,16,25,22);root.setBackgroundColor(Color.rgb(3,9,18));
++        LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);root.addView(heading);
++        TextView back=text("‹  VOLTAR",16);back.setPadding(0,0,22,0);heading.addView(back);back.setOnClickListener(v->finish());
++        TextView title=text("DIAGNÓSTICO OBD2",23);heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
++        refresh=text("LER FALHAS",17);refresh.setPadding(12,12,12,12);refresh.setTextColor(Color.rgb(48,161,255));heading.addView(refresh);
++        refresh.setOnClickListener(v->read());
++        TextView note=text("Leitura de códigos armazenados, pendentes e permanentes (se a ECU suportar). Sem apagar falhas.",13);
++        note.setTextColor(Color.rgb(147,178,204));note.setPadding(0,20,0,18);root.addView(note);
++        ScrollView scroll=new ScrollView(this);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
++        result=text("Conecte o ELM327 na home e toque em LER FALHAS.",18);result.setPadding(15,10,15,12);scroll.addView(result);
++        TextView explain=text("⚠ Códigos OBD2 não são um diagnóstico definitivo. Não apague falhas sem identificar a causa. Faça a leitura com o carro estacionado.",13);
++        explain.setTextColor(Color.rgb(177,187,205));root.addView(explain);setContentView(root);
++        String cached=getSharedPreferences("civic_faults",MODE_PRIVATE).getString("summary","");
++        if(!cached.isEmpty())result.setText("Última leitura guardada:\n\n"+cached);
++    }
++    private void read(){
++        if(running)return;
++        ObdManager obd=ObdManager.shared();
++        if(obd==null||!obd.isActive()){
++            new AlertDialog.Builder(this).setTitle("OBD2 desconectado")
++                    .setMessage("Volte à tela inicial, selecione ou conecte o adaptador ELM327 e tente novamente. Feche o Torque Pro para não disputar o Bluetooth.")
++                    .setPositiveButton("Entendi",null).show();return;
++        }
++        boolean accepted=obd.requestFaultRead(text->{
++            if(isFinishing()||isDestroyed())return;
++            running=false;refresh.setText("LER NOVAMENTE");
++            String time=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date());
++            String summary=time+"\n"+text;
++            result.setText(summary);
++            getSharedPreferences("civic_faults",MODE_PRIVATE).edit().putString("summary",summary).apply();
++        });
++        if(accepted){running=true;refresh.setText("CONSULTANDO…");result.setText("Consultando os módulos OBD2…\nAguarde as respostas da ECU.");}
++        else result.setText("Consulta já em andamento. Aguarde ou volte à home.");
++    }
++    private TextView text(String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(Color.WHITE);t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
++}
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/MainActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-16 20:32:11.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-18 13:49:45.030601458 +0000
+@@ -20,6 +20,8 @@
+ import android.graphics.Color;
+ import android.graphics.Paint;
+ import android.graphics.RectF;
++import android.graphics.drawable.Drawable;
++import android.graphics.Typeface;
+ import android.location.Location;
+ import android.location.LocationListener;
+ import android.location.LocationManager;
+@@ -70,6 +72,8 @@
+     private double mapKpa = -1, engineLoadPct = -1, intakeTempC = -999, shortFuelTrimPct = -999;
+     private double avgKmL = -1d, fuelLitresPerHour = -1d, tripDistanceKm = 0d, tripFuelLitres = 0d;
+     private long lastFuelMs = 0L;
++    private long lastHistorySample = 0L;
++    private static final String HOME_PREFS = "civic_shortcuts";
+     private final Runnable ticker = new Runnable() {
+         @Override public void run() {
+             if (gpsKmh >= 0 && System.currentTimeMillis() - lastGpsTime > 30000) {
+@@ -112,6 +116,7 @@
+                     rpm = valueRpm; coolant = temperature; volts = voltage; obdSpeed = speed;
+                     saveTelemetry();
+                     surface.invalidate();
++                    saveHistorySample();
+                 });
+             }
+             @Override public void onFuelRate(double litresPerHour) {
+@@ -126,6 +131,7 @@
+                 runOnUiThread(() -> {
+                     mapKpa=map; engineLoadPct=load; intakeTempC=intake; shortFuelTrimPct=trim;
+                     saveTelemetry();
++                    saveHistorySample();
+                 });
+             }
+         });
+@@ -169,12 +175,48 @@
+                 .putLong("lastUpdate",System.currentTimeMillis()).apply();
+     }
+ 
++
++    /** Coleta local, sem GPS exato, VIN nem dados pessoais; nenhum envio automático. */
++    private void saveHistorySample() {
++        long now = System.currentTimeMillis();
++        if (!obdConnected || now - lastHistorySample < 60000L) return;
++        lastHistorySample = now;
++        TelemetryArchive.record(this, now, (float)rpm, coolant, volts,
++                gpsKmh, (float)avgKmL, (float)mapKpa, (float)engineLoadPct,
++                (float)intakeTempC, (float)shortFuelTrimPct);
++    }
++
++    private void openApplicationCatalog(boolean selecting, int slot) {
++        Intent intent = new Intent(this, AppCatalogActivity.class);
++        intent.putExtra("select_slot", selecting ? slot : -1);
++        safeStart(intent);
++    }
++    private String slotPackage(int slot) {
++        return getSharedPreferences(HOME_PREFS, MODE_PRIVATE).getString("pkg" + slot, "");
++    }
++    private String slotActivity(int slot) {
++        return getSharedPreferences(HOME_PREFS, MODE_PRIVATE).getString("activity" + slot, "");
++    }
++    private void openShortcut(int slot) {
++        String pkg=slotPackage(slot), activity=slotActivity(slot);
++        if(pkg.isEmpty()) { openApplicationCatalog(true,slot);return; }
++        if(!activity.isEmpty()) {
++            Intent i=new Intent(Intent.ACTION_MAIN);
++            i.addCategory(Intent.CATEGORY_LAUNCHER);
++            i.setComponent(new ComponentName(pkg,activity));
++            safeStart(i);return;
++        }
++        openPackage(pkg);
++    }
++
+     private final class Ui extends View {
+         private final Bitmap image;
+         private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+         private final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+         private float touchX, touchY;
++        private final Drawable[] shortcutIcons = new Drawable[3];
++        private final String[] shortcutKeys = new String[3];
+         Ui() {
+             super(MainActivity.this);
+             image = BitmapFactory.decodeResource(getResources(), R.drawable.civic_ui_compacto);
+@@ -220,15 +262,58 @@
+             }
+             erase(c,1325,835,1570,882,Color.rgb(4,11,18));
+             print(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1330,869,31,LIGHT,true);
++            drawShortcuts(c);
+             c.restore();
+         }
++        private void drawShortcuts(Canvas c) {
++            // Atalhos configuráveis discretos, sem cobrir o Civic.
++            final float y=678f, w=102f, h=88f;
++            for(int slot=0;slot<3;slot++){
++                float x=1276f+slot*115f;
++                fill.setStyle(Paint.Style.FILL);
++                fill.setColor(Color.argb(224,3,12,24));
++                c.drawRoundRect(new RectF(x,y,x+w,y+h),17,17,fill);
++                fill.setStyle(Paint.Style.STROKE);
++                fill.setStrokeWidth(1.7f);
++                fill.setColor(BLUE);
++                c.drawRoundRect(new RectF(x,y,x+w,y+h),17,17,fill);
++                fill.setStyle(Paint.Style.FILL);
++                String pkg=slotPackage(slot), activity=slotActivity(slot);
++                String label=getSharedPreferences(HOME_PREFS,MODE_PRIVATE).getString("label"+slot,"");
++                if (pkg.isEmpty()) {
++                    print(c,"+",x+35,y+46,38,BLUE,true);
++                    print(c,"ADD",x+34,y+75,16,Color.WHITE,true);
++                } else {
++                    try {
++                        String key=pkg+"/"+activity;
++                        if(!key.equals(shortcutKeys[slot]) || shortcutIcons[slot]==null){
++                            shortcutKeys[slot]=key;
++                            shortcutIcons[slot]=!activity.isEmpty()
++                                    ? getPackageManager().getActivityIcon(new ComponentName(pkg,activity))
++                                    : getPackageManager().getApplicationIcon(pkg);
++                        }
++                        Drawable icon=shortcutIcons[slot];
++                        icon.setBounds((int)x+32,(int)y+8,(int)x+70,(int)y+46);
++                        icon.draw(c);
++                    } catch (Exception e) { print(c,"▶",x+32,y+46,30,BLUE,true); }
++                    String shortened=label.length()>10 ? label.substring(0,9)+"…" : label;
++                    text.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
++                    text.setTextSize(16f);text.setColor(Color.WHITE);
++                    c.drawText(shortened,x+(w-text.measureText(shortened))/2,y+75,text);
++                }
++            }
++        }
+         @Override public boolean onTouchEvent(MotionEvent e) {
+             float x=e.getX()*1648/getWidth(), y=e.getY()*928/getHeight();
+             if (e.getAction()==MotionEvent.ACTION_DOWN) { touchX=x; touchY=y;return true; }
+             if (e.getAction()==MotionEvent.ACTION_UP) {
+                 if (Math.abs(x-touchX)>55 || Math.abs(y-touchY)>55)return true;
+                 performClick();
+-                if (x>1390 && y>216 && y<340) showMenu();
++                if (y>674 && y<777 && x>1271 && x<1612) {
++                    int slot=(int)((x-1276)/115);
++                    if(slot>=0 && slot<3)openShortcut(slot);
++                }
++                else if (x>1390 && y>216 && y<340) showMenu();
+                 else if (x>1380 && y>410 && y<548) openDashboards();
+                 else if (x>1390 && y>540 && y<660) safeStart(new Intent(MainActivity.this,NovaActivity.class));
+                 else if (y>780 && x<448) chooseObdDevice();
+@@ -242,26 +327,40 @@
+ 
+     private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
+     private void showMenu() {
+-        final String[] entries={"Aplicativos da central","Dashboards","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","Bluetooth","Atualizar pelo GitHub","Ajustes"};
++        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","Bluetooth","Atualizar pelo GitHub","Ajustes"};
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
+                 .setItems(entries,(d,w)->{
+                     switch(w){
+-                        case 0:showInstalledApps();break;
+-                        case 1:openDashboards();break;
+-                        case 2:safeStart(new Intent(this,NovaActivity.class));break;
+-                        case 3:chooseObdDevice();break;
+-                        case 4:openPackage("com.google.android.apps.maps");break;
+-                        case 5:openPackage("com.waze");break;
+-                        case 6:openMusic();break;
+-                        case 7:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
+-                        case 8:updates.checkForUpdates();break;
++                        case 0:openApplicationCatalog(false,-1);break;
++                        case 1:chooseShortcutSlot();break;
++                        case 2:openDashboards();break;
++                        case 3:safeStart(new Intent(this,FaultCodesActivity.class));break;
++                        case 4:safeStart(new Intent(this,CarHistoryActivity.class));break;
++                        case 5:safeStart(new Intent(this,NovaActivity.class));break;
++                        case 6:chooseObdDevice();break;
++                        case 7:openPackage("com.google.android.apps.maps");break;
++                        case 8:openPackage("com.waze");break;
++                        case 9:openMusic();break;
++                        case 10:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
++                        case 11:updates.checkForUpdates();break;
+                         default:showSettings();
+                     }
+                 }).setNegativeButton("Fechar",null).show();
+     }
++    private void chooseShortcutSlot(){
++        new AlertDialog.Builder(this).setTitle("Escolha o atalho da tela inicial")
++                .setItems(new String[]{"Atalho 1","Atalho 2","Atalho 3"},
++                        (d,i)->openApplicationCatalog(true,i))
++                .setNeutralButton("Limpar atalhos",(d,w)->new AlertDialog.Builder(this)
++                        .setTitle("Remover os atalhos da home?")
++                        .setNegativeButton("Cancelar",null)
++                        .setPositiveButton("Remover",(a,b)->{getSharedPreferences(HOME_PREFS,MODE_PRIVATE).edit().clear().apply();surface.invalidate();})
++                        .show())
++                .setNegativeButton("Cancelar",null).show();
++    }
+     private void showSettings() {
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
+-            .setItems(new String[]{"Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre"},
++            .setItems(new String[]{"Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre"},
+                 (d,which)->{
+                     switch(which){
+                         case 0:chooseObdDevice();break;
+@@ -271,29 +370,17 @@
+                             .setMessage("Isso zera só o cálculo estimado, não os dados do carro.")
+                             .setNegativeButton("Cancelar",null).setPositiveButton("Zerar",(a,b)->resetTrip()).show();break;
+                         case 4:toggleAutomaticObd();break;
+-                        case 5:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+-                        case 6:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+-                        case 7:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.6")
++                        case 5:chooseShortcutSlot();break;
++                        case 6:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
++                        case 7:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
++                        case 8:requestGps();break;
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.8")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
+                 }).setNegativeButton("Fechar",null).show();
+     }
+-    private void showInstalledApps() {
+-        Intent query=new Intent(Intent.ACTION_MAIN);query.addCategory(Intent.CATEGORY_LAUNCHER);
+-        PackageManager pm=getPackageManager();List<ResolveInfo> found=pm.queryIntentActivities(query,0);
+-        List<ResolveInfo> apps=new ArrayList<>();
+-        for(ResolveInfo i:found)if(i.activityInfo!=null&&!getPackageName().equals(i.activityInfo.packageName))apps.add(i);
+-        Collections.sort(apps,Comparator.comparing(a->a.loadLabel(pm).toString().toLowerCase(PT)));
+-        if(apps.isEmpty()){Toast.makeText(this,"Nenhum app encontrado",Toast.LENGTH_LONG).show();return;}
+-        String[] labels=new String[apps.size()];for(int i=0;i<apps.size();i++)labels[i]=apps.get(i).loadLabel(pm).toString();
+-        new AlertDialog.Builder(this).setTitle("Aplicativos instalados").setItems(labels,(d,index)->{
+-            ResolveInfo a=apps.get(index);Intent i=new Intent(Intent.ACTION_MAIN);
+-            i.addCategory(Intent.CATEGORY_LAUNCHER);
+-            i.setComponent(new ComponentName(a.activityInfo.packageName,a.activityInfo.name));safeStart(i);
+-        }).setNegativeButton("Voltar",null).show();
+-    }
++    private void showInstalledApps() { openApplicationCatalog(false,-1); }
+     private void openPackage(String name) {
+         Intent i=getPackageManager().getLaunchIntentForPackage(name);
+         if(i!=null)safeStart(i);else Toast.makeText(this,"App não instalado: "+name,Toast.LENGTH_LONG).show();
+@@ -411,7 +498,7 @@
+         if(code==REQUEST_GPS&&gpsAllowed())startGps();
+         if(code==REQUEST_BLUETOOTH&&btAllowed())tryAutoObd();
+     }
+-    @Override protected void onResume(){super.onResume();dashboardOpen = false;if(gpsAllowed())startGps();if(updates!=null)updates.onResume();
++    @Override protected void onResume(){super.onResume();dashboardOpen = false;if(surface!=null)surface.invalidate();if(gpsAllowed())startGps();if(updates!=null)updates.onResume();
+         if (Build.VERSION.SDK_INT >= 31 && !btAllowed()) {
+             BluetoothManager manager=(BluetoothManager)getSystemService(Context.BLUETOOTH_SERVICE);
+             if (manager!=null && manager.getAdapter()!=null)
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/NovaActivity.java civic_v18_work/app/src/main/java/br/com/civicdrive/NovaActivity.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/NovaActivity.java	2026-11-15 20:39:38.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/NovaActivity.java	2026-11-18 13:47:58.270247828 +0000
+@@ -63,6 +63,10 @@
+         TextView configure = button("CONFIGURAR", CYAN);
+         top.addView(configure, new LinearLayout.LayoutParams(dp(135), dp(47)));
+         configure.setOnClickListener(v -> configure());
++        TextView car = button("DADOS DO CIVIC", CYAN);
++        LinearLayout.LayoutParams carParams=new LinearLayout.LayoutParams(dp(150),dp(47));
++        carParams.leftMargin=dp(8);top.addView(car,carParams);
++        car.setOnClickListener(v -> carSummary());
+ 
+         state = text("", 12, GRAY, false);
+         state.setPadding(0, dp(8), 0, dp(9));
+@@ -103,6 +107,19 @@
+         sendButton.setOnClickListener(v -> send());
+     }
+ 
++    private void carSummary(){
++        final String summary=TelemetryArchive.localSummary(this);
++        new AlertDialog.Builder(this).setTitle("Memória local do Civic")
++                .setMessage(summary+"\n\nEsta memória está apenas na central. A Nova Total no servidor ainda não recebeu os dados.")
++                .setNegativeButton("Fechar",null)
++                .setNeutralButton("VER HISTÓRICO",(d,w)->startActivity(new android.content.Intent(this,CarHistoryActivity.class)))
++                .setPositiveButton("PREPARAR ENVIO À NOVA",(d,w)->{
++                    messageInput.setText(summary.length()>1450?summary.substring(0,1450):summary);
++                    messageInput.setSelection(messageInput.length());
++                    android.widget.Toast.makeText(this,"Revise e toque ENVIAR para compartilhar com sua Nova configurada.",android.widget.Toast.LENGTH_LONG).show();
++                }).show();
++    }
++
+     private void updateStatus() {
+         if (state != null) state.setText(config.url().isEmpty() || !config.hasToken()
+             ? "NOVA NÃO CONFIGURADA  ·  Sem envio de dados" : "NOVA CONFIGURADA  ·  HTTPS / conexão sob demanda");
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/ObdManager.java civic_v18_work/app/src/main/java/br/com/civicdrive/ObdManager.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-16 20:32:11.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-18 13:46:23.027008272 +0000
+@@ -8,6 +8,9 @@
+ import java.io.OutputStream;
+ import java.nio.charset.StandardCharsets;
+ import java.util.Locale;
++import java.util.LinkedHashSet;
++import android.os.Handler;
++import android.os.Looper;
+ import java.util.UUID;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+@@ -31,9 +34,18 @@
+     private volatile Thread worker;
+     private volatile boolean stopped = true;
+     private volatile long generation = 0L;
++    public interface FaultCallback { void completed(String result); }
++    private volatile FaultCallback pendingFaultRead;
++    private static volatile ObdManager shared;
++    public static ObdManager shared() {return shared;}
++    public boolean isConnected(){return socket != null && isActive();}
++    public boolean requestFaultRead(FaultCallback callback){
++        if(callback==null || !isActive() || pendingFaultRead!=null)return false;
++        pendingFaultRead=callback;return true;
++    }
+     public boolean isActive() { Thread t=worker;return !stopped && t!=null && t.isAlive(); }
+ 
+-    public ObdManager(Listener listener) { this.listener = listener; }
++    public ObdManager(Listener listener) { this.listener = listener; shared=this; }
+ 
+     public synchronized void connect(BluetoothDevice device) {
+         close();
+@@ -93,6 +105,12 @@
+                     if (which == 3) extras[3] = (bytes[0] - 128) * 100.0 / 128.0; // STFT banco 1
+                 }
+                 if (generation == session) listener.onExtended(extras[0], extras[1], extras[2], extras[3]);
++                FaultCallback callback=pendingFaultRead;
++                if(callback!=null){
++                    pendingFaultRead=null;
++                    String result=readFaultCodes(out,in);
++                    new Handler(Looper.getMainLooper()).post(()->callback.completed(result));
++                }
+                 Thread.sleep(800);
+             }
+         } catch (Exception e) {
+@@ -110,6 +128,47 @@
+         }
+     }
+ 
++    /** Somente leitura: 03 armazenados, 07 pendentes, 0A permanentes. NUNCA envia o modo 04. */
++    private String readFaultCodes(OutputStream out, InputStream in){
++        StringBuilder result=new StringBuilder("Leitura OBD2 · ECU do Civic\n");
++        String[] modes={"03","07","0A"};
++        String[] titles={"Armazenados (03)","Pendentes (07)","Permanentes (0A)"};
++        for(int k=0;k<modes.length;k++){
++            try {
++                String raw=command(out,in,modes[k],4200);
++                LinkedHashSet<String> codes=decodeTroubleCodes(raw,k==0?"43":k==1?"47":"4A");
++                result.append(titles[k]).append(": ");
++                if(codes.isEmpty())result.append(raw.toUpperCase(Locale.ROOT).contains("NO DATA") ?
++                        "sem resposta/não suportado" : raw.toUpperCase(Locale.ROOT).contains(k==0?"43":k==1?"47":"4A")?
++                        "nenhum código retornado":"resposta indisponível");
++                else result.append(android.text.TextUtils.join(", ",codes));
++            }catch(Exception e){result.append(titles[k]).append(": falha na consulta");}
++            result.append("\n");
++        }
++        result.append("\nConsulta somente leitura. Não apaga códigos nem substitui diagnóstico mecânico.");
++        return result.toString();
++    }
++    static LinkedHashSet<String> decodeTroubleCodes(String raw,String marker) {
++        LinkedHashSet<String> result=new LinkedHashSet<>();
++        if(raw==null)return result;
++        for(String line:raw.toUpperCase(Locale.ROOT).split("[\r\n]+")){
++            if(line.contains("NO DATA")||line.contains("ERROR"))continue;
++            String hex=line.replaceAll("[^0-9A-F]", "");
++            int at=hex.indexOf(marker);
++            if(at<0)continue;
++            int offset=at+marker.length();
++            for(int p=offset;p+4<=hex.length() && result.size()<24;p+=4){
++                try{
++                    int a=Integer.parseInt(hex.substring(p,p+2),16),b=Integer.parseInt(hex.substring(p+2,p+4),16);
++                    if(a==0&&b==0)continue;
++                    String code=""+"PCBU".charAt((a>>6)&3)+((a>>4)&3)+String.format(Locale.ROOT,"%X%02X",a&15,b);
++                    result.add(code);
++                }catch(Exception ignored){break;}
++            }
++        }
++        return result;
++    }
++
+     private String command(OutputStream out, InputStream in, String command, long timeoutMs) throws IOException, InterruptedException {
+         if (stopped) throw new IOException("Conexão encerrada");
+         out.write((command + "\r").getBytes(StandardCharsets.US_ASCII));
+@@ -177,6 +236,7 @@
+     private void notifyStatus(String msg, boolean connected) { listener.onStatus(msg, connected); }
+     public synchronized void close() {
+         stopped = true;
++        pendingFaultRead=null;
+         ++generation;
+         safeClose(socket);
+         socket = null;
+diff -ruN civic_v18_baseline/app/src/main/java/br/com/civicdrive/TelemetryArchive.java civic_v18_work/app/src/main/java/br/com/civicdrive/TelemetryArchive.java
+--- civic_v18_baseline/app/src/main/java/br/com/civicdrive/TelemetryArchive.java	1970-01-01 00:00:00.000000000 +0000
++++ civic_v18_work/app/src/main/java/br/com/civicdrive/TelemetryArchive.java	2026-11-18 13:45:37.289934609 +0000
+@@ -0,0 +1,104 @@
++package br.com.civicdrive;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++import org.json.JSONArray;
++import org.json.JSONObject;
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
++import java.nio.charset.StandardCharsets;
++import java.text.DateFormat;
++import java.util.ArrayList;
++import java.util.Date;
++import java.util.List;
++import java.util.Locale;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++
++/** Histórico offline privado, amostragem por minuto, sem coordenadas, VIN ou upload automático. */
++final class TelemetryArchive {
++    private static final String FILE="civic_history.jsonl";
++    private static final ExecutorService disk=Executors.newSingleThreadExecutor();
++    private static final int MAX_SAMPLES=1008; // amostra/minuto, até uma semana de leituras (com carro ligado).
++    private TelemetryArchive() { }
++    static void record(Context context,long timestamp,float rpm,int coolant,float voltage,float speed,float kmL,
++                       float map,float load,float iat,float trim) {
++        Context app=context.getApplicationContext();
++        disk.execute(()->{
++            try {
++                JSONObject j=new JSONObject();j.put("at",timestamp);
++                if(rpm>=0)j.put("rpm",rpm);if(coolant>-100)j.put("ect_c",coolant);
++                if(voltage>0)j.put("volts",voltage);if(speed>=0)j.put("gps_kmh",speed);
++                if(kmL>=0)j.put("km_l_est",kmL);if(map>=0)j.put("map_kpa",map);
++                if(load>=0)j.put("load_pct",load);if(iat>-100)j.put("iat_c",iat);
++                if(trim>-200)j.put("stft_pct",trim);
++                File f=new File(app.getFilesDir(),FILE);
++                try(BufferedWriter out=new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f,true),StandardCharsets.UTF_8))){
++                    out.write(j.toString());out.newLine();
++                }
++                if(f.length()>150_000)compact(f);
++            } catch(Exception ignored){ }
++        });
++    }
++    private static void compact(File source) throws Exception {
++        List<String> rows=new ArrayList<>();long limit=System.currentTimeMillis()-7L*24*3600_000L;
++        try(BufferedReader in=new BufferedReader(new InputStreamReader(new FileInputStream(source),StandardCharsets.UTF_8))){
++            String line;while((line=in.readLine())!=null){
++                try {JSONObject o=new JSONObject(line);if(o.optLong("at",0)>=limit)rows.add(line);}catch(Exception ignored){}
++                if(rows.size()>MAX_SAMPLES)rows.remove(0);
++            }
++        }
++        File tmp=new File(source.getParentFile(),source.getName()+".tmp");
++        try(BufferedWriter out=new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp),StandardCharsets.UTF_8))){
++            for(String row:rows){out.write(row);out.newLine();}
++        }
++        if(!tmp.renameTo(source)){source.delete();tmp.renameTo(source);}
++    }
++    static String localSummary(Context c) {
++        List<JSONObject> history=read(c,500);
++        if(history.isEmpty())return "Histórico local: ainda sem amostras OBD2. Ligue o carro com o ELM327 conectado.";
++        int count=0;double totalTemp=0,peakTemp=-999,peakRpm=-1,sumKmL=0;int consumed=0;
++        long first=0,last=0;
++        for(JSONObject o:history){
++            long at=o.optLong("at");if(first==0)first=at;last=at;
++            if(o.has("ect_c")){double x=o.optDouble("ect_c");totalTemp+=x;count++;peakTemp=Math.max(peakTemp,x);}
++            peakRpm=Math.max(peakRpm,o.optDouble("rpm",-1));
++            if(o.has("km_l_est")){sumKmL+=o.optDouble("km_l_est");consumed++;}
++        }
++        StringBuilder b=new StringBuilder("Civic G8 · histórico LOCAL (somente leitura)\n");
++        b.append("Amostras: ").append(history.size()).append("; período: ")
++                .append(DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(first)))
++                .append(" a ").append(DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(last))).append("\n");
++        if(count>0)b.append(String.format(Locale.getDefault(),"Arrefecimento: média %.1f °C; máxima %.0f °C\n",totalTemp/count,peakTemp));
++        if(peakRpm>=0)b.append(String.format(Locale.getDefault(),"Rotação máxima observada: %.0f rpm\n",peakRpm));
++        if(consumed>0)b.append(String.format(Locale.getDefault(),"Média de leituras de consumo estimado: %.1f km/L (não aferido)\n",sumKmL/consumed));
++        String codes=c.getSharedPreferences("civic_faults",Context.MODE_PRIVATE).getString("summary","");
++        if(!codes.isEmpty())b.append("Última leitura de falhas:\n").append(codes).append("\n");
++        b.append("Sem GPS exato, VIN ou dados pessoais. Ainda não sincronizado com a Nova Total.");
++        return b.toString();
++    }
++    static List<JSONObject> read(Context ctx,int maximum){
++        List<JSONObject> rows=new ArrayList<>();File f=new File(ctx.getFilesDir(),FILE);
++        if(!f.isFile())return rows;
++        try(BufferedReader reader=new BufferedReader(new InputStreamReader(new FileInputStream(f),StandardCharsets.UTF_8))){
++            String line;while((line=reader.readLine())!=null){
++                try{rows.add(new JSONObject(line));if(rows.size()>maximum)rows.remove(0);}catch(Exception ignored){}
++            }
++        }catch(Exception ignored){}
++        return rows;
++    }
++    static String exportJson(Context ctx){
++        JSONArray array=new JSONArray();for(JSONObject row:read(ctx,MAX_SAMPLES))array.put(row);
++        JSONObject result=new JSONObject();try{result.put("source","civic_drive");result.put("vehicle","Civic G8 2011");
++            result.put("sample_period_seconds",60);result.put("samples",array);result.put("faults",ctx.getSharedPreferences("civic_faults",Context.MODE_PRIVATE).getString("summary",""));}
++        catch(Exception ignored){}
++        return result.toString();
++    }
++    static void clear(Context ctx) {disk.execute(()->{File f=new File(ctx.getApplicationContext().getFilesDir(),FILE);if(f.exists())f.delete();});
++        ctx.getSharedPreferences("civic_faults",Context.MODE_PRIVATE).edit().clear().apply();}
++}
