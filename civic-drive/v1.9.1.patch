@@ -1,0 +1,318 @@
+diff -ruN '--exclude=*.webp' civic_v19_source/README.md civic_v191_src/README.md
+--- civic_v19_source/README.md	2026-11-18 19:27:38.289598652 +0000
++++ civic_v191_src/README.md	2026-11-18 19:34:21.083682050 +0000
+@@ -1,4 +1,4 @@
+-# Civic G8 — Launcher independente v1.9
++# Civic G8 — Launcher independente v1.9.1
+ 
+ Projeto Android nativo (Java) para multimídia Android do Honda Civic G8 2011. **Não é o Rota Launcher** nem modificação dele. A arte de referência aprovada é `app/src/main/res/drawable-nodpi/civic_ui_compacto.webp`.
+ 
+@@ -27,8 +27,8 @@
+ ```json
+ {
+   "versionCode": 10,
+-  "versionName": "1.9.0",
+-  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.apk",
++  "versionName": "1.9.1",
++  "apkUrl": "https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.1.apk",
+   "sha256": "SHA256_REAL_DO_APK_DEPOIS_DA_COMPILACAO"
+ }
+ ```
+@@ -43,32 +43,32 @@
+ - Não colocar token Nova embutido em APK ou GitHub.
+ - As imagens ilustram o Civic G8, não comprovam equipamento específico do carro.
+ 
+-## Alterações da v1.9
++## Alterações da v1.9.1
+ - Retirados do cabeçalho do wallpaper o nome CIVIC G8, relógio e ícones duplicados; preservada a logo Honda e todo o restante do visual.
+ - OBD2 reconecta automaticamente ao ELM327 previamente selecionado; no primeiro uso seleciona sozinho apenas quando houver um único adaptador OBD pareado, evitando escolha equivocada. OBD2 continua podendo ser selecionado no menu.
+ - Ao abrir o launcher tenta reconectar o adaptador; após desconexão faz novas tentativas com intervalo, sem necessidade de tocar no indicador.
+ - Bloco Motor passou a Arrefecimento, com valor ECT de PID 0105 e barra discreta, sem inventar temperatura sem leitura.
+-- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.9 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
++- Atualizador ainda exige confirmação do Android e **assinatura igual à versão instalada**. Para v1.9.1 e posteriores, configurar assinatura persistente em secrets GitHub para instalar em cima da v1.4. Debug key do runner não é estável.
+ 
+-## Alterações da v1.9
++## Alterações da v1.9.1
+ - Dashboards ganhou MAP 010B, carga calculada 0104, temperatura de admissão 010F e correção curta de combustível STFT banco 1 0106.
+ - Sensores avançados lidos em rodízio, um por ciclo, sem modificar ECU e sem alterar a home.
+ - Sensores não suportados apresentam traço, sem valor simulado.
+ - Ainda requer assinatura digital permanente via GitHub Actions Secrets para atualizar instalações anteriores sem desinstalar.
+ 
+-## Novidades v1.9
++## Novidades v1.9.1
+ - Atalhos personalizáveis na HOME: 3 posições, qualquer atividade Android visível. Toque em + para escolher Rádio/Waze/outro. Menu → Adicionar atalho permite substituir.
+ - Catálogo de apps com busca e **ícones originais** dos aplicativos instalados. Alguns apps de fábrica sem atividade LAUNCHER exportada não podem ser abertos por apps externos.
+ - Dashboards com medidores digitais, detalhamento por toque, filtros e alertas preventivos em âmbar (limites exemplificativos, não diagnóstico).
+ - Diagnóstico OBD2: leitura dos modos 03, 07, 0A pelo ELM327 já conectado; **NÃO há comando para apagar códigos (modo 04)**. Nem todas as ECUs aceitam modo 0A.
+ - Memória offline privada: uma amostra de sensores por minuto enquanto ELM327 conectado; arquivo JSONL limitado, sem VIN/GPS exato. Histórico consultável/compartilhável com confirmação. Sem envio automático de telemetria.
+ - NOVA: botão DADOS DO CIVIC prepara um resumo para enviar explicitamente ao endpoint HTTPS autenticado configurado na tela da Nova. **O servidor Nova Total não possui nesta versão endpoint de ingestão/histórico do Civic: a persistência central remota ainda não existe**.
+-- Versão 9 / 1.9.0; release deve ser assinada com o mesmo certificado permanente da v1.7. NÃO gerar APK com chave debug diferente.
++- Versão 9 / 1.9.1; release deve ser assinada com o mesmo certificado permanente da v1.7. NÃO gerar APK com chave debug diferente.
+ 
+ ### Contrato futuro de integração Nova Total (a implementar no servidor)
+-`POST /api/civic/telemetry` com Authorization Bearer, Content-Type application/json e corpo {source:'civic_drive',vehicle:'Civic G8 2011',sample_period_seconds:60,samples:[...]}. Exigir HTTPS, token individual, rate limit, schema e limites de tamanho, persistência isolada e retenção definida. Não expor Ollama diretamente nem colocar token no código ou GitHub. Na v1.9 o usuário exporta dados manualmente ou envia RESUMO pela tela de chat já existente.
++`POST /api/civic/telemetry` com Authorization Bearer, Content-Type application/json e corpo {source:'civic_drive',vehicle:'Civic G8 2011',sample_period_seconds:60,samples:[...]}. Exigir HTTPS, token individual, rate limit, schema e limites de tamanho, persistência isolada e retenção definida. Não expor Ollama diretamente nem colocar token no código ou GitHub. Na v1.9.1 o usuário exporta dados manualmente ou envia RESUMO pela tela de chat já existente.
+ 
+-## Civic Drive v1.9 — Nova em energia (18/11/2026)
++## Civic Drive v1.9.1 — Nova em energia (18/11/2026)
+ 
+ - Home original substituída por painel Android Canvas de baixo custo, sem números simulados, duplicação de relógio ou legenda de cores.
+ - Nova em forma de esfera de energia animada, em ciano para velocidades abaixo de 60 km/h, azul-escuro de 60 a 109 km/h e vermelho a partir de 110 km/h; GPS quando fresco, com fallback para velocidade OBD2.
+diff -ruN '--exclude=*.webp' civic_v19_source/app/build.gradle civic_v191_src/app/build.gradle
+--- civic_v19_source/app/build.gradle	2026-11-18 18:46:37.264514746 +0000
++++ civic_v191_src/app/build.gradle	2026-11-18 19:33:22.372260492 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 10
+-        versionName '1.9.0'
++        versionCode 11
++        versionName '1.9.1'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=*.webp' civic_v19_source/app/src/main/java/br/com/civicdrive/MainActivity.java civic_v191_src/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- civic_v19_source/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-18 18:46:37.264287814 +0000
++++ civic_v191_src/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-18 19:33:22.371683633 +0000
+@@ -42,8 +42,8 @@
+ import java.util.Set;
+ 
+ /**
+- * Civic G8: tela com coordenadas de referência 1648x928. O wallpaper é apenas
+- * decoração; hora e telemetria são desenhadas a partir de dados reais.
++ * Civic G8 1.9.1: true approved-reference HUD scaled to 1648x928.
++ * Art contains NO live telemetry. RPM, ECT, updates and shortcuts stay native.
+  * Valores não disponíveis aparecem como travessão.
+  */
+ public final class MainActivity extends Activity implements LocationListener {
+@@ -217,6 +217,12 @@
+         private static final float CW=1648f, CH=928f;
+         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+         private final Bitmap civic = BitmapFactory.decodeResource(getResources(), R.drawable.civic_cinema);
++        private final Bitmap approvedBackdrop = BitmapFactory.decodeResource(getResources(), R.drawable.civic_v191_base);
++        private final Bitmap[] electricOrbs = {
++            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_cyan),
++            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_blue),
++            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_red)
++        };
+         private final Drawable[] shortcuts = new Drawable[3];
+         private final String[] shortcutsNames = new String[3];
+         private int wallpaper = 0; // 0 = Nova (animated), 1 = Civic photo, 2 = quiet energy
+@@ -250,18 +256,17 @@
+             color(tint);p.setStrokeWidth(stroke);p.setStyle(Paint.Style.STROKE);c.drawRoundRect(rect,radius,radius,p);p.setStyle(Paint.Style.FILL);
+         }
+         private void glowBackground(Canvas c){
+-            color(Color.rgb(1,7,15));c.drawRect(0,0,CW,CH,p);
+-            color(Color.WHITE);
+-            p.setShader(new android.graphics.LinearGradient(0,0,0,CH,Color.rgb(5,20,36),Color.rgb(1,7,14),android.graphics.Shader.TileMode.CLAMP));
+-            c.drawRect(0,0,CW,CH,p);p.setShader(null);
+-            color(Color.WHITE);
+-            p.setShader(new android.graphics.RadialGradient(824,325,570,
+-                new int[]{Color.argb(44,12,60,108),Color.argb(0,6,19,31)},null,android.graphics.Shader.TileMode.CLAMP));
+-            c.drawCircle(824,325,570,p);p.setShader(null);
+-            line(c,40,105,1608,105,Color.argb(100,30,126,203),1.5f);
+-            line(c,48,714,1600,714,Color.argb(65,27,110,194),1.3f);
+-            // Faint neutral floor; no sweeping, flashing glow.
+-            line(c,0,898,1648,898,Color.argb(34,20,96,160),2);
++            // Exact reference approved by the owner, with text/data removed in the authored asset.
++            // This preserves its glassy instrument rings and natural electric illumination.
++            if(approvedBackdrop!=null){
++                color(Color.WHITE);
++                c.drawBitmap(approvedBackdrop,null,new RectF(0,0,CW,CH),p);
++            } else {
++                color(Color.rgb(2,10,20));c.drawRect(0,0,CW,CH,p);
++            }
++            // Preserve screen boundaries on lower-resolution central units.
++            line(c,42,694,1606,694,Color.argb(60,26,110,190),1);
++            line(c,150,885,1500,885,Color.argb(55,21,111,179),2);
+         }
+         private int velocity(){
+             float live = gpsKmh >= 0 && System.currentTimeMillis()-lastGpsTime <= 30000 ? gpsKmh :
+@@ -282,45 +287,29 @@
+         }
+         private int alpha(int c,int a){ return Color.argb(a,Color.red(c),Color.green(c),Color.blue(c)); }
+         private void orb(Canvas c){
+-            final float cx=820f,cy=299f;
+-            float now=android.os.SystemClock.uptimeMillis()/1000f;
+-            orbColor=mix(orbColor,targetOrbColor(),0.14f);
+-            final int vivid=orbColor;
+-            float pulse = 1f + .025f*(float)Math.sin(now*2.2);
+-            c.save();c.translate(cx,cy);c.scale(pulse,pulse);
++            // Reuse the approved electric plasma artwork, NOT a radiating-spoke placeholder.
++            // Each palette is a real orb asset. Animations are gentle: breathe and orbit.
++            final int v=velocity();
++            final int i=v>=110?2:(v>=60?1:0);
++            final int hue=i==2?Color.rgb(228,52,62):(i==1?Color.rgb(28,76,187):Color.rgb(18,184,231));
++            final Bitmap sprite=electricOrbs[i];
++            if(sprite==null)return;
++            final float now=android.os.SystemClock.uptimeMillis()/1000f;
++            final float pulse=1.0f+.009f*(float)Math.sin(now*1.8f);
++            final float cx=811f,cy=263f;
++            c.save();c.scale(pulse,pulse,cx,cy);
+             color(Color.WHITE);
+-            p.setShader(new android.graphics.RadialGradient(0,0,196,
+-                new int[]{alpha(vivid,95),alpha(vivid,35),Color.TRANSPARENT},
+-                new float[]{0,.51f,1},android.graphics.Shader.TileMode.CLAMP));
+-            c.drawCircle(0,0,196,p);p.setShader(null);
+-            color(alpha(vivid,130));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2f);
+-            c.drawCircle(0,0,169,p);
+-            color(alpha(vivid,165));p.setStrokeWidth(3f);
+-            c.drawArc(new RectF(-170,-170,170,170),now*17f,82,false,p);
+-            c.drawArc(new RectF(-170,-170,170,170),now*(-12f)+175,55,false,p);
+-            p.setStyle(Paint.Style.FILL);
+-            // Electric tendrils: deterministic flowing waves; no random flashing pixels.
+-            for(int strand=0;strand<25;strand++){
+-                float ang=(float)(Math.PI*2*strand/25f + .085f*Math.sin(now*.28f+strand));
+-                android.graphics.Path path=new android.graphics.Path();
+-                for(int j=0;j<=10;j++){
+-                    float r=10+j*14f;
+-                    float jitter=(float)Math.sin(strand*2.11+j*2.79+now*(.7f+(strand%4)*.1f))*11f*j/11f;
+-                    float theta=ang+.07f*(float)Math.sin(now+strand)+j*.013f;
+-                    float x=(float)Math.cos(theta)*(r+jitter), y=(float)Math.sin(theta)*(r+jitter);
+-                    if(j==0)path.moveTo(x,y);else path.lineTo(x,y);
+-                }
+-                color(alpha(vivid,strand%4==0?205:110));p.setStrokeWidth(strand%3==0?2.2f:1.1f);
+-                p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
+-                c.drawPath(path,p);p.setStyle(Paint.Style.FILL);
+-            }
+-            color(Color.WHITE);
+-            p.setShader(new android.graphics.RadialGradient(0,0,66,
+-                new int[]{Color.argb(236,244,250,255),alpha(vivid,209),alpha(vivid,0)},
+-                new float[]{0,.30f,1},android.graphics.Shader.TileMode.CLAMP));
+-            c.drawCircle(0,0,66,p);p.setShader(null);
++            // Reference artwork was created at 1672x941; scaled to app's 1648x928 space.
++            c.drawBitmap(sprite,null,new RectF(493f,14f,1127f,529f),p);
+             c.restore();
+-            center(c,"N O V A",cx,515,43,Color.rgb(224,239,252),true);
++            // Quiet rotating energy trails: keep animation subtle on a small car display.
++            color(Color.argb(65,Color.red(hue),Color.green(hue),Color.blue(hue)));
++            p.setStrokeWidth(2f);p.setStyle(Paint.Style.STROKE);
++            c.drawArc(new RectF(cx-209,cy-213,cx+209,cy+213),
++                    (now*12f)%360,30,false,p);
++            c.drawArc(new RectF(cx-210,cy-214,cx+210,cy+214),
++                    (270-now*10f)%360,20,false,p);
++            p.setStyle(Paint.Style.FILL);
+         }
+         private void civicWallpaper(Canvas c){
+             if(civic != null){
+@@ -341,64 +330,51 @@
+             center(c,"NOVA",820,515,43,Color.rgb(220,235,252),true);
+         }
+         private void header(Canvas c){
+-            color(Color.rgb(227,237,248));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);
+-            c.drawRoundRect(new RectF(53,24,117,86),11,11,p);p.setStyle(Paint.Style.FILL);
+-            center(c,"H",85,72,47,Color.WHITE,true);
+-            txt(c,"CIVIC",150,58,43,Color.rgb(226,240,250),true);
+-            txt(c,"DRIVE",314,58,43,Color.rgb(36,194,247),true);
+-            txt(c,"G8  ·  2011",153,90,22,Color.rgb(152,174,200),false);
++            // Honda identity is part of the approved decoration; don't redraw it.
++            // Date/time must be live, never pre-printed in wallpaper.
+             java.util.Date date = new java.util.Date();
+-            center(c,new java.text.SimpleDateFormat("HH:mm",PT).format(date),1410,55,49,Color.rgb(232,245,255),true);
+-            center(c,new java.text.SimpleDateFormat("EEE, dd/MM/yyyy",PT).format(date),1410,88,23,Color.rgb(150,179,210),false);
+-            // Settings action, not a duplicate system status bar.
+-            line(c,1565,41,1590,41,Color.rgb(160,199,234),4);
+-            line(c,1565,52,1590,52,Color.rgb(160,199,234),4);
+-            line(c,1565,63,1590,63,Color.rgb(160,199,234),4);
++            center(c,new java.text.SimpleDateFormat("HH:mm",PT).format(date),1423,53,46,
++                Color.rgb(232,245,255),true);
++            center(c,new java.text.SimpleDateFormat("EEE, dd/MM/yyyy",PT).format(date),1423,88,22,
++                Color.rgb(169,190,211),false);
++            line(c,1567,37,1593,37,Color.rgb(158,195,224),3);
++            line(c,1567,50,1593,50,Color.rgb(158,195,224),3);
++            line(c,1567,63,1593,63,Color.rgb(158,195,224),3);
+         }
+         private void gauge(Canvas c,float cx,float cy,boolean temp){
+-            final float radius=178;
+-            RectF area = new RectF(cx-radius,cy-radius,cx+radius,cy+radius);
+-            int idle=Color.rgb(36,67,99),stroke=Color.rgb(27,155,236);
+-            color(Color.argb(23,10,29,50));c.drawCircle(cx,cy,radius-13,p);
+-            color(idle);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(13);
+-            c.drawArc(area,141,259,false,p);
+-            double current=temp?coolant:rpm;
+-            boolean available=obdConnected && (temp?coolant>-100:rpm>=0);
+-            float f=temp ? (float)((current-40)/75d) : (float)(current/8000d);
+-            f=Math.max(0f,Math.min(1f,f));
+-            color(temp && available && coolant>=105?Color.rgb(244,165,59):stroke);
+-            p.setStrokeWidth(15);
+-            if(available)c.drawArc(area,141,259*f,false,p);
+-            color(Color.rgb(15,51,85));p.setStrokeWidth(1.5f);c.drawCircle(cx,cy,radius+13,p);
+-            p.setStyle(Paint.Style.FILL);
+-            for(int i=0;i<=8;i++){
+-                double a=Math.toRadians(141+259d*i/8);
+-                float x1=cx+(float)Math.cos(a)*(radius-33),y1=cy+(float)Math.sin(a)*(radius-33);
+-                float x2=cx+(float)Math.cos(a)*(radius-18),y2=cy+(float)Math.sin(a)*(radius-18);
+-                line(c,x1,y1,x2,y2,Color.rgb(131,171,210),2);
++            // Dial contours, ticks and blue reflections are in the approved art.
++            // Needle/progress and center numbers are live, not painted-in demo data.
++            final boolean available=obdConnected && (temp?coolant>-100:rpm>=0);
++            final float radius=177f;
++            final float f=available?Math.max(0f,Math.min(1f,temp?(coolant-40)/75f:(float)(rpm/8000d))):0f;
++            if(available){
++                final boolean hot=temp && coolant>=105;
++                final int accent=hot?Color.rgb(248,170,56):Color.rgb(15,167,234);
++                color(accent);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(8f);
++                c.drawArc(new RectF(cx-radius,cy-radius,cx+radius,cy+radius),143,253*f,false,p);
++                p.setStyle(Paint.Style.FILL);
+             }
+             if(temp){
+-                center(c,"ARREFECIMENTO",cx,cy-31,21,Color.rgb(172,203,230),false);
+-                center(c,available?coolant+" °C":"— °C",cx,cy+38,62,Color.WHITE,true);
+-                center(c,"ECT · MOTOR",cx,cy+85,18,Color.rgb(92,150,198),false);
+-            } else {
+-                center(c,"ROTAÇÃO",cx,cy-31,21,Color.rgb(172,203,230),false);
+-                center(c,available?String.format(PT,"%.1f",rpm/1000d):"—",cx,cy+38,70,Color.WHITE,true);
+-                center(c,"RPM × 1000",cx,cy+85,19,Color.rgb(92,150,198),false);
++                center(c,"ARREFECIMENTO",cx,cy-21,24,Color.rgb(199,217,231),false);
++                center(c,available?coolant+" °C":"— °C",cx,cy+52,61,Color.WHITE,true);
++            }else{
++                center(c,available?String.format(PT,"%.1f",rpm/1000d):"—",cx,cy+20,67,Color.WHITE,true);
++                center(c,"×1000 RPM",cx,cy+65,23,Color.rgb(206,223,234),false);
+             }
+         }
+         private void status(Canvas c){
+-            RectF area=new RectF(50,573,1598,690);
+-            color(Color.argb(120,4,18,34));c.drawRoundRect(area,23,23,p);
+-            outline(c,area,23,Color.argb(120,35,119,189),1.6f);
+-            line(c,559,593,559,670,Color.rgb(17,68,105),2);
+-            line(c,1092,593,1092,670,Color.rgb(17,68,105),2);
+-            txt(c,"OBD2",128,621,25,Color.rgb(161,193,218),false);
+-            txt(c,obdStatus,128,663,31,obdConnected?Color.rgb(75,205,244):Color.rgb(209,215,229),true);
+-            txt(c,"ARREFECIMENTO",638,621,25,Color.rgb(161,193,218),false);
+-            txt(c,obdConnected&&coolant>-100 ? coolant+" °C":"— °C",638,663,31,Color.WHITE,true);
+-            txt(c,"CONSUMO ESTIMADO",1175,621,25,Color.rgb(161,193,218),false);
+-            txt(c,avgKmL>=0 ? String.format(PT,"%.1f km/L",avgKmL):"— km/L",1175,663,31,Color.WHITE,true);
++            // The approved layout uses a slim, almost-black translucent information ribbon.
++            RectF bar=new RectF(75,559,1573,680);
++            color(Color.argb(112,2,12,25));c.drawRoundRect(bar,13,13,p);
++            outline(c,bar,13,Color.argb(84,33,109,172),1.2f);
++            line(c,531,577,531,660,Color.rgb(15,73,106),1.6f);
++            line(c,1045,577,1045,660,Color.rgb(15,73,106),1.6f);
++            txt(c,"OBD2",171,602,24,Color.rgb(164,193,213),false);
++            txt(c,obdStatus,171,646,34,obdConnected?Color.rgb(42,204,232):Color.rgb(201,208,223),true);
++            txt(c,"ARREFECIMENTO",614,602,24,Color.rgb(164,193,213),false);
++            txt(c,obdConnected&&coolant>-100?coolant+" °C":"— °C",614,646,34,Color.WHITE,true);
++            txt(c,"CONSUMO ESTIMADO",1136,602,24,Color.rgb(164,193,213),false);
++            txt(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1136,646,34,Color.WHITE,true);
+         }
+         private void icon(Canvas c,int kind,float x,float y,int tint){
+             color(tint);p.setStrokeWidth(4f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);p.setStyle(Paint.Style.STROKE);
+@@ -466,7 +442,7 @@
+             super.onDraw(c);c.save();c.scale(getWidth()/CW,getHeight()/CH);
+             glowBackground(c);header(c);
+             if(wallpaper==1)civicWallpaper(c);else if(wallpaper==2)quietWallpaper(c);else orb(c);
+-            gauge(c,310,332,true);gauge(c,1336,332,false);
++            gauge(c,303,334,true);gauge(c,1324,334,false);
+             status(c);dock(c);
+             c.restore();
+             // Deliberately limit CPU usage on older Android head units.
+@@ -574,7 +550,7 @@
+                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                         case 9:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9")
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.1")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
