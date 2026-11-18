@@ -1,0 +1,269 @@
+--- civic_v192_before/app/build.gradle	2026-11-18 20:38:43.000000000 +0000
++++ civic_v192_real/app/build.gradle	2026-11-18 20:43:01.238411492 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 11
+-        versionName '1.9.1'
++        versionCode 12
++        versionName '1.9.2'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+--- civic_v192_before/app/src/main/java/br/com/civicdrive/MainActivity.java
++++ civic_v192_real/app/src/main/java/br/com/civicdrive/MainActivity.java
+@@ -295,21 +295,35 @@
+             final Bitmap sprite=electricOrbs[i];
+             if(sprite==null)return;
+             final float now=android.os.SystemClock.uptimeMillis()/1000f;
+-            final float pulse=1.0f+.009f*(float)Math.sin(now*1.8f);
++            // Movimento visível, porém suave: o plasma respira e gira poucos graus.
++            final float pulse=1.0f+.040f*(float)Math.sin(now*1.9f);
++            final float rotation=5.5f*(float)Math.sin(now*.77f);
+             final float cx=811f,cy=263f;
+-            c.save();c.scale(pulse,pulse,cx,cy);
++            c.save();c.rotate(rotation,cx,cy);c.scale(pulse,pulse,cx,cy);
+             color(Color.WHITE);
+-            // Reference artwork was created at 1672x941; scaled to app's 1648x928 space.
++            p.setAlpha(215+(int)(35f*(.5f+.5f*Math.sin(now*2.5f))));
+             c.drawBitmap(sprite,null,new RectF(493f,14f,1127f,529f),p);
+             c.restore();
+-            // Quiet rotating energy trails: keep animation subtle on a small car display.
+-            color(Color.argb(65,Color.red(hue),Color.green(hue),Color.blue(hue)));
+-            p.setStrokeWidth(2f);p.setStyle(Paint.Style.STROKE);
+-            c.drawArc(new RectF(cx-209,cy-213,cx+209,cy+213),
+-                    (now*12f)%360,30,false,p);
+-            c.drawArc(new RectF(cx-210,cy-214,cx+210,cy+214),
+-                    (270-now*10f)%360,20,false,p);
++            // Anéis elétricos em rotação e partículas para evidenciar a animação
++            // mesmo em centrais antigas. Sem piscadas bruscas nem efeito estroboscópico.
++            int r=Color.red(hue),g=Color.green(hue),b=Color.blue(hue);
++            p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);
++            p.setStrokeWidth(3.8f);
++            p.setColor(Color.argb(170,r,g,b));
++            c.drawArc(new RectF(cx-219,cy-222,cx+219,cy+222),
++                    (now*43f)%360,69,false,p);
++            p.setStrokeWidth(2.5f);p.setColor(Color.argb(125,r,g,b));
++            c.drawArc(new RectF(cx-199,cy-203,cx+199,cy+203),
++                    (310-now*35f)%360,95,false,p);
+             p.setStyle(Paint.Style.FILL);
++            for(int n=0;n<7;n++){
++                float a=(float)(now*(n%2==0?0.63f:-0.52f)+n*Math.PI*2/7);
++                float rad=198+13f*(float)Math.sin(now*1.2f+n*2.3f);
++                float x=cx+rad*(float)Math.cos(a);
++                float y=cy+rad*(float)Math.sin(a);
++                float size=2.8f+1.4f*(float)Math.sin(now*1.7f+n);
++                p.setColor(Color.argb(155,r,g,b));c.drawCircle(x,y,Math.max(1.4f,size),p);
++            }
+         }
+         private void civicWallpaper(Canvas c){
+             if(civic != null){
+@@ -447,7 +461,7 @@
+             c.restore();
+             // Deliberately limit CPU usage on older Android head units.
+             if(animationRunning && wallpaper==0 && getWindowVisibility()==View.VISIBLE)
+-                postInvalidateDelayed(75);
++                postInvalidateDelayed(60); // cerca de 16 fps, sem sobrecarregar a central
+         }
+         @Override public boolean onTouchEvent(MotionEvent e){
+             float x=e.getX()*CW/getWidth(),y=e.getY()*CH/getHeight();
+@@ -681,6 +695,6 @@
+                 requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);
+         } else tryAutoObd();
+     }
+-    @Override protected void onPause(){if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
++    @Override protected void onPause(){if(surface!=null)surface.pauseAnimation();if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
+     @Override protected void onDestroy(){isShuttingDown=true;handler.removeCallbacks(ticker);if(gps!=null)gps.removeUpdates(this);if(obd!=null)obd.close();super.onDestroy();}
+ }
+--- civic_v192_before/app/src/main/java/br/com/civicdrive/ObdManager.java
++++ civic_v192_real/app/src/main/java/br/com/civicdrive/ObdManager.java
+@@ -32,15 +32,16 @@
+     private final Listener listener;
+     private volatile BluetoothSocket socket;
+     private volatile Thread worker;
++    private volatile boolean linkReady = false;
+     private volatile boolean stopped = true;
+     private volatile long generation = 0L;
+     public interface FaultCallback { void completed(String result); }
+     private volatile FaultCallback pendingFaultRead;
+     private static volatile ObdManager shared;
+     public static ObdManager shared() {return shared;}
+-    public boolean isConnected(){return socket != null && isActive();}
++    public boolean isConnected(){return linkReady && isActive();}
+     public boolean requestFaultRead(FaultCallback callback){
+-        if(callback==null || !isActive() || pendingFaultRead!=null)return false;
++        if(callback==null || !isConnected() || pendingFaultRead!=null)return false;
+         pendingFaultRead=callback;return true;
+     }
+     public boolean isActive() { Thread t=worker;return !stopped && t!=null && t.isAlive(); }
+@@ -66,52 +67,100 @@
+         try {
+             active = device.createRfcommSocketToServiceRecord(SPP_UUID);
+             socket = active;
+-            active.connect();
+-            if (stopped) return;
++            try {
++                active.connect();
++            } catch (IOException secureFailure) {
++                // Alguns clones de ELM327 pareados aceitam apenas RFCOMM insecure.
++                // A tentativa ocorre somente se a conexão normal falhar.
++                safeClose(active);
++                if (stopped || generation != session) return;
++                active = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
++                socket = active;
++                active.connect();
++            }
++            if (stopped || generation != session) return;
+             InputStream in = active.getInputStream();
+             OutputStream out = active.getOutputStream();
+-            command(out, in, "ATZ", 5500);
+-            command(out, in, "ATE0", 2500);
+-            command(out, in, "ATL0", 2500);
+-            command(out, in, "ATS0", 2500);
+-            command(out, in, "ATH0", 2500);
+-            command(out, in, "ATSP0", 3500);
+-            if (generation == session) notifyStatus("OBD2 conectado  •  dados ao vivo", true);
++            // Falha isolada de comando AT não deve desligar o Bluetooth inteiro.
++            optionalCommand(out,in,"ATZ",5800);
++            optionalCommand(out,in,"ATE0",1800);
++            optionalCommand(out,in,"ATL0",1800);
++            optionalCommand(out,in,"ATS0",1800);
++            optionalCommand(out,in,"ATH0",1800);
++            optionalCommand(out,in,"ATSP0",2500);
++            optionalCommand(out,in,"ATAT1",1200);
+ 
+-            // Sensores extras consultados alternadamente para preservar RPM/ECT e evitar
+-            // sobrecarregar um ELM327 lento. Valores ausentes continuam indisponíveis.
++            // OBD2 principal em todas as voltas; apenas UM sensor extra por volta.
++            // Um PID ausente ou lento nunca derruba sozinho o ELM327.
+             double[] extras = {-1, -1, -999, -999};
+-            int extraRound = 0;
++            double lastRpm=-1, lastFuel=-1;
++            int lastTemp=-999, lastSpeed=-1;
++            float lastVolts=-1;
++            String[] extraPids = {"015E","0110","010B","0104","010F","0106"};
++            long[] retryExtrasAt = new long[extraPids.length];
++            int optionalRound=0, silentCycles=0;
++            boolean dataReady=false, directFuelSupported=false;
+             while (!stopped && generation == session) {
+-                double rpm = parseRpm(command(out, in, "010C", 3500));
+-                int temp = parseTemperature(command(out, in, "0105", 3500));
+-                int speed = parseSpeed(command(out, in, "010D", 3500));
+-                float volts = parseVoltage(command(out, in, "ATRV", 3500));
++                double rpm=parseRpm(optionalCommand(out,in,"010C",2200));
++                int temp=parseTemperature(optionalCommand(out,in,"0105",2200));
++                int speed=parseSpeed(optionalCommand(out,in,"010D",1800));
++                float volts=parseVoltage(optionalCommand(out,in,"ATRV",1600));
+                 if (stopped || generation != session) break;
+-                listener.onValues(rpm, temp, volts, speed);
+-                // PID 015E: taxa direta (L/h), se suportado.
+-                // PID 0110: MAF como estimativa (mistura estequiométrica gasolina).
+-                double fuelRate = parseFuelRate(command(out, in, "015E", 3500));
+-                if (fuelRate < 0) fuelRate = parseMafBasedFuelRate(command(out, in, "0110", 3500));
+-                if (generation == session) listener.onFuelRate(fuelRate);
+-                int which = extraRound++ % 4;
+-                String pid = which == 0 ? "010B" : which == 1 ? "0104" : which == 2 ? "010F" : "0106";
+-                String data = command(out, in, pid, 2500);
+-                int[] bytes = parsePid(data, pid.substring(2), 1);
+-                if (bytes != null) {
+-                    if (which == 0) extras[0] = bytes[0]; // MAP, kPa
+-                    if (which == 1) extras[1] = bytes[0] * 100.0 / 255.0; // Carga %
+-                    if (which == 2) extras[2] = bytes[0] - 40; // IAT, graus C
+-                    if (which == 3) extras[3] = (bytes[0] - 128) * 100.0 / 128.0; // STFT banco 1
++                if (rpm>=0) lastRpm=rpm;
++                if (temp>-100) lastTemp=temp;
++                if (speed>=0) lastSpeed=speed;
++                if (volts>=0) lastVolts=volts;
++                boolean ecuResponded=rpm>=0 || temp>-100 || speed>=0;
++                if (ecuResponded) {
++                    silentCycles=0;
++                    if (!dataReady) {
++                        dataReady=true;
++                        linkReady=true;
++                        notifyStatus("OBD2 conectado  •  dados reais",true);
++                    }
++                    if (generation == session) listener.onValues(lastRpm,lastTemp,lastVolts,lastSpeed);
++                } else {
++                    silentCycles++;
++                    // A ECU pode demorar um ciclo: manter o status e tentar recuperar.
++                    if (silentCycles>=3) throw new IOException("ECU sem respostas consecutivas");
++                }
++                // Limita consultas extras em clones lentos. NO DATA = PID suspenso 5min.
++                int which=optionalRound++%extraPids.length;
++                if (ecuResponded && (which!=1 || !directFuelSupported) && System.currentTimeMillis()>=retryExtrasAt[which]) {
++                    String result=optionalCommand(out,in,extraPids[which],1500);
++                    if (result==null) retryExtrasAt[which]=System.currentTimeMillis()+45000L;
++                    else if (result.toUpperCase(Locale.ROOT).contains("NO DATA") ||
++                            result.toUpperCase(Locale.ROOT).contains("UNABLE TO CONNECT"))
++                        retryExtrasAt[which]=System.currentTimeMillis()+300000L;
++                    if (result!=null) {
++                        if (which==0 || which==1) {
++                            double rate=which==0?parseFuelRate(result):parseMafBasedFuelRate(result);
++                            if (rate>=0) {
++                                if(which==0)directFuelSupported=true;
++                                lastFuel=rate;
++                            }
++                        } else {
++                            int[] bytes=parsePid(result,extraPids[which].substring(2),1);
++                            if (bytes!=null) {
++                                if(which==2)extras[0]=bytes[0];
++                                if(which==3)extras[1]=bytes[0]*100.0/255.0;
++                                if(which==4)extras[2]=bytes[0]-40;
++                                if(which==5)extras[3]=(bytes[0]-128)*100.0/128.0;
++                            }
++                        }
++                    }
++                }
++                if (dataReady && generation == session) {
++                    if(lastFuel>=0) listener.onFuelRate(lastFuel);
++                    listener.onExtended(extras[0],extras[1],extras[2],extras[3]);
+                 }
+-                if (generation == session) listener.onExtended(extras[0], extras[1], extras[2], extras[3]);
+                 FaultCallback callback=pendingFaultRead;
+                 if(callback!=null){
+                     pendingFaultRead=null;
+                     String result=readFaultCodes(out,in);
+                     new Handler(Looper.getMainLooper()).post(()->callback.completed(result));
+                 }
+-                Thread.sleep(800);
++                Thread.sleep(650);
+             }
+         } catch (Exception e) {
+             if (!stopped && generation == session) {
+@@ -119,6 +168,7 @@
+                 notifyStatus("OBD2 desconectado  •  " + reason, false);
+             }
+         } finally {
++            linkReady=false;
+             safeClose(active);
+             if (socket == active) socket = null;
+             if (!stopped && generation == session) {
+@@ -169,8 +219,19 @@
+         return result;
+     }
+ 
++    /** Timeout de leitura opcional: falha pontual não significa Bluetooth desconectado. */
++    private String optionalCommand(OutputStream out,InputStream in,String cmd,long timeoutMs) throws InterruptedException {
++        try { return command(out,in,cmd,timeoutMs); }
++        catch (IOException e) { return null; }
++    }
++
+     private String command(OutputStream out, InputStream in, String command, long timeoutMs) throws IOException, InterruptedException {
+         if (stopped) throw new IOException("Conexão encerrada");
++        // Limpa respostas atrasadas de comandos anteriores para não interpretar PID errado.
++        int drained=0;
++        while (in.available()>0 && drained++<1000) {
++            if (in.read()<0) throw new IOException("Conexão finalizada");
++        }
+         out.write((command + "\r").getBytes(StandardCharsets.US_ASCII));
+         out.flush();
+         long deadline = System.currentTimeMillis() + timeoutMs;
+@@ -236,6 +297,7 @@
+     private void notifyStatus(String msg, boolean connected) { listener.onStatus(msg, connected); }
+     public synchronized void close() {
+         stopped = true;
++        linkReady=false;
+         pendingFaultRead=null;
+         ++generation;
+         safeClose(socket);
