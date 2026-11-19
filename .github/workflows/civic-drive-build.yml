@@ -1,4 +1,4 @@
-# Civic G8 v1.9.3 — RPM-reactive Nova and premium lightweight dashboard gauges.
+# Civic G8 v1.9.4 — owner-approved HUD, 4 dashboards, still Nova plasma.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -12,6 +12,8 @@ on:
       - 'civic-drive/v1.9.2.patch'
       - 'civic-drive/v1.9.3-apply.py'
       - 'civic-drive/v1.9.3-art.base64'
+      - 'civic-drive/v1.9.4.patch'
+      - 'civic-drive/v1.9.4-art.base64'
       - 'civic-drive/v1.9.1-art.base64'
       - 'civic-drive/signing.enc.json'
       - '.github/workflows/civic-drive-build.yml'
@@ -69,8 +71,12 @@ jobs:
           base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/civic-v193-art.zip
           unzip -oq /tmp/civic-v193-art.zip -d build-civic
           for f in civic_orb_neon civic_orb_purple civic_orb_amber; do test -s "build-civic/app/src/main/res/drawable-nodpi/${f}.webp"; done
-          grep -q "versionCode 13" build-civic/app/build.gradle
-          grep -q "versionName '1.9.3'" build-civic/app/build.gradle
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.4.patch)
+          base64 --decode civic-drive/v1.9.4-art.base64 > /tmp/civic-v194-art.zip
+          unzip -oq /tmp/civic-v194-art.zip -d build-civic
+          for f in civic_dash_engine civic_dash_rear civic_dash_honda; do test -s "build-civic/app/src/main/res/drawable-nodpi/${f}.webp"; done
+          grep -q "versionCode 14" build-civic/app/build.gradle
+          grep -q "versionName '1.9.4'" build-civic/app/build.gradle
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -107,7 +113,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v1.9.3.apk'
+          signed = root/'civic-drive/civic-drive-v1.9.4.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -129,20 +135,20 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v1.9.3 validado com assinatura permanente.')
+          print('APK v1.9.4 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v1.9.3.apk
+          APK=civic-drive/civic-drive-v1.9.4.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":13,"versionName":"1.9.3","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.3.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":14,"versionName":"1.9.4","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.4.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v1.9.3.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v1.9.4.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
             git commit -m 'build: Civic G8 1.9.2 Bluetooth e Nova animacao'
             git push origin HEAD:civic-drive-build
@@ -150,5 +156,5 @@ jobs:
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.9.3-release
-          path: civic-drive/civic-drive-v1.9.3.apk
+          name: civic-g8-v1.9.4-release
+          path: civic-drive/civic-drive-v1.9.4.apk
