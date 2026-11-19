@@ -1,0 +1,170 @@
+diff -ruN '--exclude=*.webp' civic-v195-baseline/README.md civic-v195-work/README.md
+--- civic-v195-baseline/README.md	2026-11-19 15:51:00.000000000 +0000
++++ civic-v195-work/README.md	2026-11-19 19:31:00.718557699 +0000
+@@ -67,3 +67,7 @@
+ 
+ ### Contrato futuro de integração Nova Total (a implementar no servidor)
+ `POST /api/civic/telemetry` com Authorization Bearer, Content-Type application/json e corpo {source:'civic_drive',vehicle:'Civic G8 2011',sample_period_seconds:60,samples:[...]}. Exigir HTTPS, token individual, rate limit, schema e limites de tamanho, persistência isolada e retenção definida. Não expor Ollama diretamente nem colocar token no código ou GitHub. Na v1.8 o usuário exporta dados manualmente ou envia RESUMO pela tela de chat já existente.
++
++## v1.9.5
++
++Visual full-tech aplicado nas páginas Velocímetro e Contagiros, seguindo as artes aprovadas. Sem telemetria de demonstração; OBD2 e identificação Android/assinatura preservados.
+diff -ruN '--exclude=*.webp' civic-v195-baseline/app/build.gradle civic-v195-work/app/build.gradle
+--- civic-v195-baseline/app/build.gradle	2026-11-19 15:57:04.000000000 +0000
++++ civic-v195-work/app/build.gradle	2026-11-19 19:29:58.392433373 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 14
+-        versionName '1.9.4'
++        versionCode 15
++        versionName '1.9.5'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=*.webp' civic-v195-baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java civic-v195-work/app/src/main/java/br/com/civicdrive/DashboardActivity.java
+--- civic-v195-baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-19 16:00:54.000000000 +0000
++++ civic-v195-work/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-19 19:29:58.392097267 +0000
+@@ -82,6 +82,7 @@
+     private final class DashView extends View {
+         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+         private final Bitmap engine=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_engine);
++        private final Bitmap frontTech=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_front_tech);
+         private final Bitmap car=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_rear);
+         private final Bitmap honda=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_honda);
+         private final float[] tabs={203,611,1035,1440};
+@@ -191,26 +192,116 @@
+             label(c,value,x+31,y+95,45,WHITE,true,false);
+             if(info!=null&&!info.isEmpty())label(c,info,x+31,y+h-19,17,a(CYAN,190),false,false);
+         }
++        /** Premium HUD visual language, modeled on the two owner-approved full-tech previews.
++         * Only pixels of a decorative vehicle are sampled from the concept art; the d.*
++         * values, gauge needles, status labels, warning colors and time are all live.
++         */
++        private void glowArc(Canvas c,RectF bounds,float start,float sweep,int col,float width){
++            if(sweep<=0)return;
++            set(col);p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);
++            p.setStrokeWidth(width*2.7f);p.setColor(a(col,38));
++            c.drawArc(bounds,start,sweep,false,p);
++            p.setStrokeWidth(width*1.55f);p.setColor(a(col,88));
++            c.drawArc(bounds,start,sweep,false,p);
++            p.setStrokeWidth(width);p.setColor(a(col,236));
++            c.drawArc(bounds,start,sweep,false,p);
++            p.setStyle(Paint.Style.FILL);p.clearShadowLayer();
++        }
++        private void hudField(Canvas c,float cx,float cy,float radius){
++            set(Color.WHITE);p.setShader(new RadialGradient(cx,cy,radius*1.5f,
++                new int[]{Color.argb(24,0,152,229),Color.argb(11,0,69,130),Color.TRANSPARENT},
++                null,Shader.TileMode.CLAMP));
++            c.drawCircle(cx,cy,radius*1.5f,p);p.setShader(null);
++            // Minimal floor grid, the visual reference without its example readings.
++            for(int i=-5;i<=5;i++)line(c,cx+i*50,687,cx+i*14,565,a(CYAN,20),1f);
++            for(int y=580;y<=692;y+=28)line(c,cx-260+(y-580)*.25f,y,cx+260-(y-580)*.25f,y,a(CYAN,20),1f);
++        }
++        private void heroDial(Canvas c,float cx,float cy,float r,float raw,float maximum,
++                              String title,String units,boolean tach){
++            final boolean valid=raw>=0f && !Float.isNaN(raw) && !Float.isInfinite(raw);
++            final float value=valid?Math.max(0,Math.min(maximum,raw)):0;
++            final int highlight=valid && (tach?raw>=5000:raw>=120)?WARN:CYAN;
++            // Transparent graphite glass dial, delicate mechanical graduations.
++            set(Color.WHITE);p.setShader(new RadialGradient(cx,cy,r,
++                new int[]{a(BLUE,30),Color.rgb(1,9,19),Color.rgb(1,7,15)},null,Shader.TileMode.CLAMP));
++            c.drawCircle(cx,cy,r,p);p.setShader(null);
++            set(a(BLUE,80));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.6f);
++            c.drawCircle(cx,cy,r-3,p);c.drawCircle(cx,cy,r-15,p);c.drawCircle(cx,cy,r-40,p);
++            p.setStyle(Paint.Style.FILL);
++            RectF arc=new RectF(cx-r+20,cy-r+20,cx+r-20,cy+r-20);
++            float start=150f,sweep=240f;
++            set(a(CYAN,35));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(11);
++            c.drawArc(arc,start,sweep,false,p);p.setStyle(Paint.Style.FILL);
++            if(valid)glowArc(c,arc,start,sweep*value/maximum,highlight,7f);
++            for(int i=0;i<=44;i++){
++                float theta=(float)Math.toRadians(start+240f*i/44f);
++                float cA=(float)Math.cos(theta),sA=(float)Math.sin(theta);
++                float ro=r-26,ri=r-(i%4==0?67: i%2==0?52:41);
++                line(c,cx+ri*cA,cy+ri*sA,cx+ro*cA,cy+ro*sA,
++                     a(i%4==0?WHITE:CYAN,i%4==0?220:102),i%4==0?2.8f:1.25f);
++            }
++            // Fixed scale marks are instrument graduations, not vehicle measurements.
++            final int count=tach?8:11;
++            for(int j=0;j<=count;j++){
++                float theta=(float)Math.toRadians(start+240f*j/count);
++                float rad=r-94;
++                float n=tach?j:j*20;
++                label(c,String.format(PT,"%.0f",n),cx+rad*(float)Math.cos(theta),
++                    cy+rad*(float)Math.sin(theta)+10f,tach?29:24,WHITE,j%2==0,true);
++            }
++            // Top line/visual speed arc in lieu of a constantly swinging needle.
++            if(valid){
++                float theta=(float)Math.toRadians(start+sweep*value/maximum);
++                float tip=r-78;
++                line(c,cx+(r-110)*(float)Math.cos(theta),cy+(r-110)*(float)Math.sin(theta),
++                     cx+tip*(float)Math.cos(theta),cy+tip*(float)Math.sin(theta),highlight,5f);
++            }
++            label(c,title,cx,cy-43,23,MUTED,false,true);
++            String number=valid?(tach?String.format(PT,"%.1f",raw/1000f):
++                                      String.format(PT,"%.0f",raw)):"—";
++            label(c,number,cx,cy+62,tach?118:132,WHITE,true,true);
++            label(c,units,cx,cy+105,28,valid?CYAN:MUTED,false,true);
++        }
++        private void sideDial(Canvas c,float cx,float cy,float r,float v,float min,float max,
++                              String title,String unit,int decimals,boolean warning){
++            gauge(c,cx,cy,r,min,max,v,title,unit,decimals,false,warning);
++        }
++        private void statusBarFullTech(Canvas c,String caption,String left,String right){
++            float x=413,y=690,w=819,h=65;
++            backdropCard(c,x,y,w,h);
++            label(c,caption,x+32,y+37,21,MUTED,false,false);
++            label(c,left,x+295,y+43,28,d.online?CYAN:MUTED,true,false);
++            line(c,x+493,y+12,x+493,y+53,a(CYAN,90),1.3f);
++            label(c,right,x+518,y+43,21,MUTED,false,false);
++        }
+         private void speedPage(Canvas c){
+-            final float v=d.speed;
+-            gauge(c,824,443,263,0,220,v,"VELOCIDADE", "km/h",0,true,v>=120);
+-            backdropCard(c,82,685,1484,74);
+-            label(c,"GPS / OBD2",140,719,21,MUTED,false,false);
+-            label(c,reading(v,0,"km/h"),140,751,29,CYAN,true,false);
+-            line(c,580,705,580,747,a(CYAN,95),1);
+-            label(c,"ELM327",634,719,21,MUTED,false,false);
+-            label(c,d.online?"Conectado":"Desconectado",634,751,29,d.online?CYAN:MUTED,true,false);
+-            line(c,1087,705,1087,747,a(CYAN,95),1);
+-            label(c,"ALERTA CONFIGURADO",1128,719,20,MUTED,false,false);
+-            label(c,"120 km/h",1128,751,29,WHITE,true,false);
++            // Main 220km/h HUD dial, GPS card, two ancillary instruments.
++            hudField(c,822,436,285);
++            heroDial(c,820,454,282,d.speed,220,"VELOCIDADE", "km/h",false);
++            if(frontTech!=null){set(Color.WHITE);p.setAlpha(186);
++                c.drawBitmap(frontTech,null,new RectF(631,575,1011,711),p);p.setAlpha(255);
++            }
++            backdropCard(c,60,235,371,128);
++            label(c,"VELOCIDADE GPS",92,279,25,MUTED,false,false);
++            label(c,d.gpsValid?reading(d.speed,0,"km/h"):"— km/h",92,330,49,WHITE,true,false);
++            label(c,d.gpsValid?"SINAL DISPONÍVEL":"AGUARDANDO GPS",92,349,16,CYAN,false,false);
++            sideDial(c,244,549,145,d.ect,40,120,"ARREFECIMENTO","°C",0,d.ect>=105);
++            sideDial(c,1409,369,143,d.rpm,0,8000,"RPM","rpm",0,d.rpm>=5000);
++            sideDial(c,1409,626,123,d.voltage,10,16,"BATERIA","V",1,d.online&&d.voltage>0&&(d.voltage<12||d.voltage>15.2));
++            statusBarFullTech(c,"OBD2",d.online?"Conectado":"Desconectado", "DADOS REAIS · ELM327");
+         }
+         private void rpmPage(Canvas c){
+-            gauge(c,824,446,252,0,8000,d.rpm,"ROTAÇÃO", "×1000 RPM",1,true,d.rpm>=5000);
+-            smallCard(c,68,325,340,148,"ARREFECIMENTO",reading(d.ect,0,"°C"),"ECT  ·  OBD2");
+-            smallCard(c,1240,325,340,148,"CARGA DO MOTOR",reading(d.load,0,"%"),"PID 0104");
+-            backdropCard(c,500,684,644,72);
+-            label(c,"CONTAGIROS AO VIVO",545,727,24,MUTED,false,false);
+-            label(c,reading(d.rpm,0,"rpm"),1061,731,31,d.rpm>=5000?WARN:CYAN,true,true);
++            // Performance tachometer with large dial and 4 true ECU sensor readings.
++            hudField(c,820,436,290);
++            heroDial(c,820,444,284,d.rpm,8000,"ROTAÇÃO", "×1000 RPM",true);
++            if(engine!=null){set(Color.WHITE);p.setAlpha(172);
++                c.drawBitmap(engine,null,new RectF(650,562,990,695),p);p.setAlpha(255);
++            }
++            sideDial(c,242,348,141,d.ect,40,120,"ARREFECIMENTO","°C",0,d.ect>=105);
++            sideDial(c,242,623,125,d.map,0,120,"MAP","kPa",0,false);
++            sideDial(c,1410,347,141,d.iat,-20,90,"IAT","°C",0,false);
++            sideDial(c,1410,624,125,d.load,0,100,"CARGA MOTOR","%",0,false);
++            statusBarFullTech(c,"TENSÃO",reading(d.voltage,1,"V"),d.online?"MOTOR AO VIVO":"AGUARDANDO ECU");
+         }
+         private void sensorsPage(Canvas c){
+             // Decorative engine art from the approved concept, never a source of data.
