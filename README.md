@@ -1,22 +1,20 @@
 # CIVIC G8 — BAIXAR APK
 
-## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.3)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
+## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.4)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
 
-**Versão atual:** 1.9.3 · Honda Civic G8 2011 · Android 7.0+.
+**Versão atual:** 1.9.4 · Honda Civic G8 2011 · Android 7.0+.
 
-**Na central multimídia:** abra `github.com/lincolnvtech/diagram` e toque no link acima.
+**Na central:** abra `github.com/lincolnvtech/diagram` ou, com a v1.7 ou posterior instalada, use **Civic Drive → Menu → Atualizar pelo GitHub → Baixar → Instalar**. Não precisa desinstalar.
 
-**Se já usa a v1.7, v1.8 ou v1.9.x assinada:** use **Civic Drive → Menu → Atualizar pelo GitHub → Baixar → Instalar**. A versão 1.9.3 mantém a assinatura digital permanente, sem necessidade de desinstalar.
+### Novidades v1.9.4 — layout aprovado
 
-### Atualizações v1.9.3
+- **Home:** esfera elétrica no centro, sem nome gravado, sem rotação ou balanço da esfera inteira. Apenas partículas, arcos e luzes evoluem suavemente com o RPM real.
+- **Dashboards:** quatro telas com instrumentos grandes e elegantes: Velocímetro, Contagiros, Sensores e Autonomia.
+- **Sensores:** ECT, carga, MAP, temperatura de admissão, tensão do ELM327 e STFT só aparecem quando houver leitura. Motor holográfico é decorativo.
+- **Autonomia:** requer consumo médio estimado disponível e litros de combustível informados manualmente. Não há nível de tanque ou hodômetro inventado.
+- **Atualização:** mesmo pacote `br.com.civicdrive` e mesma assinatura de lançamento permanente.
+- **OBD2:** mantida a reconexão e a consulta leve aos sensores da v1.9.2.
 
-- **NOVA reage à rotação real do motor (RPM, via ELM327)**, não à velocidade: ciano suave abaixo de 900 rpm; azul neon entre 900 e 1.999; azul elétrico entre 2.000 e 3.499; roxo entre 3.500 e 4.999; âmbar a partir de 5.000 rpm.
-- A esfera pulsa e movimenta partículas mais rapidamente conforme o motor sobe de giro; cores mudam suavemente, sem vermelho ou efeitos estroboscópicos.
-- **Dashboards redesenhados**: medidores circulares com arcos finos, fundo grafite, números legíveis, alertas preventivos âmbar e categorias reorganizadas sem espaços vazios.
-- **OBD2 preservado da v1.9.2**: reconexão e consultas leves ao ELM327.
-- Sem leitura de RPM, o aplicativo mantém a esfera ciano suave, sem inventar números ou inferir rotação pela velocidade.
-- Nenhum código de falha é apagado. Cor âmbar por giro alto é um aviso visual decorativo, não significa defeito.
+**Segurança:** a tela foi compilada com sucesso, mas a experiência visual e a estabilidade ainda precisam de teste físico na multimídia. A direção deve seguir os instrumentos originais do carro; não opere a central ao volante.
 
-**Importante:** o aplicativo usa dados do ELM327, sujeitos a atrasos e falhas de leitura. Teste com o veículo parado; não manuseie a central dirigindo. A central física ainda precisa validar performance e escala do layout.
-
-[Baixar especificamente o APK v1.9.3](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.3.apk)
+[Baixar especificamente a versão v1.9.4](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.4.apk)
