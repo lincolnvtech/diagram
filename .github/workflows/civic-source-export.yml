@@ -22,17 +22,20 @@ jobs:
           mkdir -p source
           base64 --decode civic-drive/source-zip.base64 > /tmp/civic-source.zip
           unzip -q /tmp/civic-source.zip -d source
-          for f in v1.6.patch v1.8.patch v1.9.patch v1.9.1.patch; do
+          for f in v1.6.patch v1.8.patch v1.9.patch v1.9.1.patch v1.9.2.patch; do
             (cd source && patch --batch -p1 < "../civic-drive/$f")
           done
           base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/civic-art.zip
           unzip -oq /tmp/civic-art.zip -d source
+          python3 civic-drive/v1.9.3-apply.py source
+          base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/civic-v193-art.zip
+          unzip -oq /tmp/civic-v193-art.zip -d source
           test -f source/app/src/main/java/br/com/civicdrive/ObdManager.java
           test -f source/app/src/main/java/br/com/civicdrive/MainActivity.java
           (cd source && zip -qr /tmp/civic-source-export.zip .)
       - name: Exportar fonte
         uses: actions/upload-artifact@v4
         with:
-          name: civic-v191-restored-source
+          name: civic-v193-restored-source
           path: /tmp/civic-source-export.zip
           retention-days: 2
