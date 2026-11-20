@@ -1,0 +1,146 @@
+diff -ruN '--exclude=CIVIC_197_CHANGES.txt' '--exclude=*.webp' '--exclude=*.png' '--exclude=*.jpg' '--exclude=*.orig' '--exclude=*.rej' '--exclude=*.zip' '--exclude=README.md' v196/app/build.gradle v197/app/build.gradle
+--- v196/app/build.gradle	2026-11-20 20:21:28.000000000 +0000
++++ v197/app/build.gradle	2026-11-20 20:23:06.092809748 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 16
+-        versionName '1.9.6'
++        versionCode 17
++        versionName '1.9.7'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=CIVIC_197_CHANGES.txt' '--exclude=*.webp' '--exclude=*.png' '--exclude=*.jpg' '--exclude=*.orig' '--exclude=*.rej' '--exclude=*.zip' '--exclude=README.md' v196/app/src/main/java/br/com/civicdrive/MainActivity.java v197/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- v196/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 20:21:29.000000000 +0000
++++ v197/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 20:23:06.092601745 +0000
+@@ -118,7 +118,7 @@
+             @Override public void onValues(double valueRpm, int temperature, float voltage, int speed) {
+                 runOnUiThread(() -> {
+                     rpm = valueRpm; coolant = temperature; volts = voltage; obdSpeed = speed;
+-                    GearEstimator.Result gear=gearEstimator.update(rpm, obdSpeed>=0?obdSpeed:gpsKmh, System.currentTimeMillis());
++                    GearEstimator.Result gear=gearEstimator.update(rpm, obdSpeed, System.currentTimeMillis());
+                     estimatedGear=gear.gear; estimatedGearConfidence=gear.confidence; estimatedGearAt=System.currentTimeMillis();
+                     saveTelemetry();
+                     surface.invalidate();
+@@ -428,8 +428,14 @@
+             line(c,1045,577,1045,660,Color.rgb(15,73,106),1.6f);
+             txt(c,"OBD2",171,602,24,Color.rgb(164,193,213),false);
+             txt(c,obdStatus,171,646,34,obdConnected?Color.rgb(42,204,232):Color.rgb(201,208,223),true);
+-            txt(c,"ARREFECIMENTO",614,602,24,Color.rgb(164,193,213),false);
+-            txt(c,obdConnected&&coolant>-100?coolant+" °C":"— °C",614,646,34,Color.WHITE,true);
++            // A temperatura já aparece no mostrador esquerdo: usar o espaço
++            // para a marcha estimada, nunca fingir que é leitura PRND da ECU.
++            txt(c,"MARCHA ESTIMADA",614,602,24,Color.rgb(164,193,213),false);
++            boolean gearFresh=obdConnected && estimatedGear>=1 && estimatedGear<=5
++                    && estimatedGearConfidence>=55 && estimatedGearAt>0
++                    && System.currentTimeMillis()-estimatedGearAt<10000L;
++            txt(c,gearFresh?(estimatedGear+"ª   EST."):"—  EST.",614,646,34,
++                    gearFresh?Color.rgb(58,199,239):Color.rgb(176,190,205),true);
+             txt(c,"CONSUMO ESTIMADO",1136,602,24,Color.rgb(164,193,213),false);
+             txt(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1136,646,34,Color.WHITE,true);
+         }
+diff -ruN '--exclude=CIVIC_197_CHANGES.txt' '--exclude=*.webp' '--exclude=*.png' '--exclude=*.jpg' '--exclude=*.orig' '--exclude=*.rej' '--exclude=*.zip' '--exclude=README.md' v196/app/src/main/java/br/com/civicdrive/ObdManager.java v197/app/src/main/java/br/com/civicdrive/ObdManager.java
+--- v196/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-20 20:21:28.000000000 +0000
++++ v197/app/src/main/java/br/com/civicdrive/ObdManager.java	2026-11-20 20:23:22.153670683 +0000
+@@ -98,35 +98,50 @@
+             float lastVolts=-1;
+             String[] extraPids = {"015E","0110","010B","0104","010F","0106"};
+             long[] retryExtrasAt = new long[extraPids.length];
+-            int optionalRound=0, silentCycles=0;
++            // O ELM327 clonado pode ficar lento ou perder uma resposta sem perder o Bluetooth.
++            // Menos comandos por ciclo e tolerância por tempo, não por 3 ciclos fixos.
++            int cycle=0, optionalRound=0;
++            long lastEcuAt=android.os.SystemClock.elapsedRealtime();
++            long rpmAt=0, speedAt=0, tempAt=0, voltAt=0, fuelAt=0;
+             boolean dataReady=false, directFuelSupported=false;
+             while (!stopped && generation == session) {
+-                double rpm=parseRpm(optionalCommand(out,in,"010C",2200));
+-                int temp=parseTemperature(optionalCommand(out,in,"0105",2200));
+-                int speed=parseSpeed(optionalCommand(out,in,"010D",1800));
+-                float volts=parseVoltage(optionalCommand(out,in,"ATRV",1600));
++                int n=cycle++;
++                // RPM e velocidade são os dois valores principais. Temperatura e
++                // tensão alternam; nunca consultar os quatro em todas as voltas.
++                double rpm=parseRpm(optionalCommand(out,in,"010C",2500));
++                int speed=parseSpeed(optionalCommand(out,in,"010D",2300));
++                int temp=n%3==0?parseTemperature(optionalCommand(out,in,"0105",2000)):-999;
++                float volts=n%8==0?parseVoltage(optionalCommand(out,in,"ATRV",1600)):-1;
+                 if (stopped || generation != session) break;
+-                if (rpm>=0) lastRpm=rpm;
+-                if (temp>-100) lastTemp=temp;
+-                if (speed>=0) lastSpeed=speed;
+-                if (volts>=0) lastVolts=volts;
+-                boolean ecuResponded=rpm>=0 || temp>-100 || speed>=0;
++                long now=android.os.SystemClock.elapsedRealtime();
++                if (rpm>=0) {lastRpm=rpm;rpmAt=now;}
++                if (speed>=0) {lastSpeed=speed;speedAt=now;}
++                if (temp>-100) {lastTemp=temp;tempAt=now;}
++                if (volts>=0) {lastVolts=volts;voltAt=now;}
++                // Não reaproveitar leitura antiga para estimar a marcha.
++                if (rpmAt==0 || now-rpmAt>7500L) lastRpm=-1;
++                if (speedAt==0 || now-speedAt>7500L) lastSpeed=-1;
++                if (tempAt==0 || now-tempAt>20000L) lastTemp=-999;
++                if (voltAt==0 || now-voltAt>40000L) lastVolts=-1;
++                if (fuelAt==0 || now-fuelAt>120000L) lastFuel=-1;
++                boolean ecuResponded=rpm>=0 || speed>=0 || temp>-100;
+                 if (ecuResponded) {
+-                    silentCycles=0;
++                    lastEcuAt=now;
+                     if (!dataReady) {
+                         dataReady=true;
+                         linkReady=true;
+                         notifyStatus("OBD2 conectado  •  dados reais",true);
+                     }
+-                    if (generation == session) listener.onValues(lastRpm,lastTemp,lastVolts,lastSpeed);
+-                } else {
+-                    silentCycles++;
+-                    // A ECU pode demorar um ciclo: manter o status e tentar recuperar.
+-                    if (silentCycles>=3) throw new IOException("ECU sem respostas consecutivas");
++                } else if (now-lastEcuAt>22000L) {
++                    // Falha real prolongada; entregar reconexão ao gerenciador.
++                    throw new IOException("ECU sem respostas por 22s");
+                 }
+-                // Limita consultas extras em clones lentos. NO DATA = PID suspenso 5min.
+-                int which=optionalRound++%extraPids.length;
+-                if (ecuResponded && (which!=1 || !directFuelSupported) && System.currentTimeMillis()>=retryExtrasAt[which]) {
++                if (dataReady && generation==session)
++                    listener.onValues(lastRpm,lastTemp,lastVolts,lastSpeed);
++                // Extras: uma consulta a cada cinco ciclos, dando prioridade aos PIDs de condução.
++                int which=optionalRound%extraPids.length;
++                if (ecuResponded && n%5==0) optionalRound++;
++                if (ecuResponded && n%5==0 && (which!=1 || !directFuelSupported) && System.currentTimeMillis()>=retryExtrasAt[which]) {
+                     String result=optionalCommand(out,in,extraPids[which],1500);
+                     if (result==null) retryExtrasAt[which]=System.currentTimeMillis()+45000L;
+                     else if (result.toUpperCase(Locale.ROOT).contains("NO DATA") ||
+@@ -138,6 +153,7 @@
+                             if (rate>=0) {
+                                 if(which==0)directFuelSupported=true;
+                                 lastFuel=rate;
++                                fuelAt=android.os.SystemClock.elapsedRealtime();
+                             }
+                         } else {
+                             int[] bytes=parsePid(result,extraPids[which].substring(2),1);
+@@ -234,9 +250,9 @@
+         }
+         out.write((command + "\r").getBytes(StandardCharsets.US_ASCII));
+         out.flush();
+-        long deadline = System.currentTimeMillis() + timeoutMs;
++        long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
+         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+-        while (!stopped && System.currentTimeMillis() < deadline && bytes.size() < 700) {
++        while (!stopped && android.os.SystemClock.elapsedRealtime() < deadline && bytes.size() < 700) {
+             while (in.available() > 0) {
+                 int c = in.read();
+                 if (c < 0) throw new IOException("Conexão finalizada");
+@@ -276,6 +292,9 @@
+         return b == null ? -1 : b[0];
+     }
+     static float parseVoltage(String text) {
++        // Bug da v1.9.6: timeout do ATRV devolvia null e derrubava
++        // toda a sessão com NullPointerException.
++        if (text==null || text.isEmpty()) return -1;
+         Matcher m = Pattern.compile("([0-9]{1,2}(?:[.,][0-9]{1,3})?)\\s*V", Pattern.CASE_INSENSITIVE).matcher(text);
+         if (!m.find()) return -1;
+         try { return Float.parseFloat(m.group(1).replace(',', '.')); }
