@@ -1,0 +1,42 @@
+name: Civic G8 - Exportar fonte 1.9.5 para revisao
+on:
+  push:
+    branches: [civic-drive-build]
+    paths: ['.github/workflows/civic-source-review.yml']
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: civic-drive-build
+      - name: Reconstruir fonte atual
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p source
+          base64 --decode civic-drive/source-zip.base64 > /tmp/source.zip
+          unzip -q /tmp/source.zip -d source
+          for f in v1.6.patch v1.8.patch v1.9.patch v1.9.1.patch v1.9.2.patch; do
+            (cd source && patch --batch -p1 < "../civic-drive/$f")
+          done
+          base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/art191.zip
+          unzip -oq /tmp/art191.zip -d source
+          python3 civic-drive/v1.9.3-apply.py source
+          base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/art193.zip
+          unzip -oq /tmp/art193.zip -d source
+          (cd source && patch --batch -p1 < ../civic-drive/v1.9.4.patch)
+          base64 --decode civic-drive/v1.9.4-art.base64 > /tmp/art194.zip
+          unzip -oq /tmp/art194.zip -d source
+          (cd source && patch --batch -p1 < ../civic-drive/v1.9.5.patch)
+          base64 --decode civic-drive/v1.9.5-art.base64 > /tmp/art195.zip
+          unzip -oq /tmp/art195.zip -d source
+          (cd source && zip -qr /tmp/civic-v195-source.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: civic-v195-source-for-review
+          path: /tmp/civic-v195-source.zip
+          retention-days: 2
