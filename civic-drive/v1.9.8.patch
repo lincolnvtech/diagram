@@ -1,0 +1,245 @@
+diff -ruN '--exclude=*.webp' '--exclude=*.jpg' '--exclude=*.png' '--exclude=*.orig' '--exclude=README.md' '--exclude=*.zip' v197/app/build.gradle v198/app/build.gradle
+--- v197/app/build.gradle	2026-11-20 21:09:24.000000000 +0000
++++ v198/app/build.gradle	2026-11-20 21:11:29.793038817 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 17
+-        versionName '1.9.7'
++        versionCode 18
++        versionName '1.9.8'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=*.webp' '--exclude=*.jpg' '--exclude=*.png' '--exclude=*.orig' '--exclude=README.md' '--exclude=*.zip' v197/app/src/main/java/br/com/civicdrive/GearEstimator.java v198/app/src/main/java/br/com/civicdrive/GearEstimator.java
+--- v197/app/src/main/java/br/com/civicdrive/GearEstimator.java	2026-11-20 21:09:24.000000000 +0000
++++ v198/app/src/main/java/br/com/civicdrive/GearEstimator.java	2026-11-20 21:11:00.826382750 +0000
+@@ -1,45 +1,87 @@
+ package br.com.civicdrive;
+ 
+-/** Marcha PROVAVEL: cálculo somente local, não é a posição real do seletor PRND.
+- * Relações retiradas de Honda Brasil, informações técnicas Civic 2011 5AT.
+- * Rodas originais: 205/55R16. A patinação do conversor pode invalidar a leitura.
++/**
++ * Estimativa local de marcha para Civic G8 2011 5AT.
++ * NAO e posicao real PRND nem leitura do TCM: usa a relacao entre RPM e km/h.
++ * As 5 relacoes, diferencial e pneu 205/55R16 vieram da ficha tecnica Honda.
++ * Conversor de torque destravado, pneus diferentes e GPS atrasado podem gerar
++ * relacoes intermediarias; nesses casos devolve marcha indisponivel.
+  */
+ public final class GearEstimator {
+     private static final double[] GEARS = {2.666, 1.534, 1.021, 0.720, 0.524};
+     private static final double FINAL = 4.437;
+-    private static final double DIAMETER_M = (16d*25.4d+2d*205d*0.55d)/1000d;
+-    private static final double WHEEL_RPM_PER_KMH = 1000d/(Math.PI*DIAMETER_M*60d);
+-    private int candidate = 0, count = 0, last = 0;
+-    private int lastScore = 0;
+-    private long lastAt = 0;
++    private static final double DIAMETER_M = (16d * 25.4d + 2d * 205d * 0.55d) / 1000d;
++    private static final double WHEEL_RPM_PER_KMH = 1000d / (Math.PI * DIAMETER_M * 60d);
++    private int candidate = 0, repeated = 0;
++    private long lastAt = 0L;
++
+     public static final class Result {
+         public final int gear, confidence;
+-        private Result(int gear,int confidence){this.gear=gear;this.confidence=confidence;}
++        public final String reason;
++        private Result(int gear, int confidence, String reason) {
++            this.gear = gear;
++            this.confidence = confidence;
++            this.reason = reason;
++        }
++    }
++
++    private Result unavailable(String reason) {
++        candidate = 0;
++        repeated = 0;
++        return new Result(0, 0, reason);
+     }
+-    /** Requer marcha consistente por 3 amostras, velocidade e giro válidos. */
++
++    /** Duas amostras estaveis; nunca adivinhar P/R/N/D nem marcha a carro parado. */
+     public Result update(double rpm, double kmh, long timestamp) {
+-        if (timestamp-lastAt>16000 || timestamp<lastAt) {candidate=0;count=0;last=0;}
+-        lastAt=timestamp;
+-        if (!Double.isFinite(rpm)||!Double.isFinite(kmh)||rpm<850||rpm>6900||kmh<22||kmh>210) {
+-            candidate=0;count=0;last=0;lastScore=0;return new Result(0,0);
++        if (timestamp <= 0L || lastAt == 0L || timestamp - lastAt > 12000L || timestamp < lastAt) {
++            candidate = 0;
++            repeated = 0;
+         }
+-        double actual=rpm/kmh, bestError=Double.MAX_VALUE, secondError=Double.MAX_VALUE;
+-        int best=0;
+-        for(int i=0;i<GEARS.length;i++){
+-            double expected=GEARS[i]*FINAL*WHEEL_RPM_PER_KMH;
+-            double err=Math.abs(actual-expected)/expected;
+-            if(err<bestError){secondError=bestError;bestError=err;best=i+1;}
+-            else if(err<secondError)secondError=err;
++        lastAt = timestamp;
++        if (!Double.isFinite(rpm) || rpm < 550d || rpm > 7000d)
++            return unavailable("SEM RPM");
++        if (!Double.isFinite(kmh) || kmh < 0d)
++            return unavailable("SEM VELOC.");
++        if (kmh < 12d)
++            return unavailable("PARADO/BAIXA VEL.");
++        if (kmh > 220d)
++            return unavailable("VELOC. INVALIDA");
++
++        double actual = rpm / kmh;
++        int best = 0;
++        double bestError = Double.MAX_VALUE, secondError = Double.MAX_VALUE;
++        for (int i = 0; i < GEARS.length; i++) {
++            double expected = GEARS[i] * FINAL * WHEEL_RPM_PER_KMH;
++            double error = Math.abs(actual - expected) / expected;
++            if (error < bestError) {
++                secondError = bestError;
++                bestError = error;
++                best = i + 1;
++            } else if (error < secondError) {
++                secondError = error;
++            }
+         }
+-        // Alta velocidade exige correspondência mais restrita; nenhuma marcha
+-        // deve ser apresentada quando há patinação forte do conversor.
+-        double tolerance=kmh<40 ? .16 : .115;
+-        if(bestError>tolerance || secondError-bestError<.095){
+-            candidate=0;count=0;last=0;lastScore=0;return new Result(0,0);
++        // Tolera variacoes do conversor, sobretudo em velocidades urbanas.
++        // Nunca usar um limite tao largo que duas marchas sejam indistinguiveis.
++        double tolerance = kmh < 30d ? 0.32d : kmh < 65d ? 0.26d : 0.22d;
++        if (bestError > tolerance)
++            return unavailable("RELACAO INCERTA");
++        if (secondError - bestError < 0.055d)
++            return unavailable("ENTRE MARCHAS");
++
++        int confidence = (int)Math.round(96d - bestError * 130d);
++        confidence = Math.max(0, Math.min(98, confidence));
++        if (confidence < 55)
++            return unavailable("RELACAO INCERTA");
++
++        if (candidate != best) {
++            candidate = best;
++            repeated = 1;
++            return new Result(0, 0, "CALCULANDO");
+         }
+-        int score=Math.max(0,Math.min(99,(int)Math.round(98-bestError*270)));
+-        if(best!=candidate){candidate=best;count=1;last=0;}else count=Math.min(20,count+1);
+-        if(count>=3) {last=best;lastScore=score;}
+-        return new Result(last,last==0?0:lastScore);
++        repeated = Math.min(20, repeated + 1);
++        if (repeated < 2)
++            return new Result(0, 0, "CALCULANDO");
++        return new Result(best, confidence, "OK");
+     }
+ }
+diff -ruN '--exclude=*.webp' '--exclude=*.jpg' '--exclude=*.png' '--exclude=*.orig' '--exclude=README.md' '--exclude=*.zip' v197/app/src/main/java/br/com/civicdrive/MainActivity.java v198/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- v197/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 21:09:24.000000000 +0000
++++ v198/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 21:11:29.792763421 +0000
+@@ -74,6 +74,8 @@
+     private final GearEstimator gearEstimator=new GearEstimator();
+     private int estimatedGear=0,estimatedGearConfidence=0;
+     private long estimatedGearAt=0L;
++    private String estimatedGearReason="SEM OBD2", estimatedGearSource="—";
++    private float estimatedGearSpeed=-1f;
+     private long lastFuelMs = 0L;
+     private long lastHistorySample = 0L;
+     private static final String HOME_PREFS = "civic_shortcuts";
+@@ -108,6 +110,7 @@
+                     if (!connected) { rpm = -1; coolant = -999; volts = -1; obdSpeed = -1;
+                         fuelLitresPerHour = -1; lastFuelMs = 0;
+                         estimatedGear=0;estimatedGearConfidence=0;estimatedGearAt=0;
++                        estimatedGearReason="SEM OBD2";estimatedGearSource="—";estimatedGearSpeed=-1f;
+                         mapKpa=-1; engineLoadPct=-1; intakeTempC=-999; shortFuelTrimPct=-999;
+                         nextObdRetryMs = System.currentTimeMillis() + 12000L;
+                     } else nextObdRetryMs = 0L;
+@@ -118,8 +121,22 @@
+             @Override public void onValues(double valueRpm, int temperature, float voltage, int speed) {
+                 runOnUiThread(() -> {
+                     rpm = valueRpm; coolant = temperature; volts = voltage; obdSpeed = speed;
+-                    GearEstimator.Result gear=gearEstimator.update(rpm, obdSpeed, System.currentTimeMillis());
+-                    estimatedGear=gear.gear; estimatedGearConfidence=gear.confidence; estimatedGearAt=System.currentTimeMillis();
++                    // A v1.9.7 descartava GPS. Sem resposta 010D o campo ficava sempre vazio.
++                    // OBD2 tem prioridade; GPS recente e valido e usado como alternativa.
++                    long now=System.currentTimeMillis();
++                    boolean gpsFresh=lastGpsTime>0 && now-lastGpsTime<7000L && gpsKmh>=0;
++                    double speedForGear=obdSpeed;
++                    String speedSource=obdSpeed>=0?"OBD2":"—";
++                    if(gpsFresh && (obdSpeed<0 || (obdSpeed<5 && gpsKmh>=12) ||
++                            (gpsKmh>=15 && obdSpeed>=0 &&
++                             Math.abs(obdSpeed-gpsKmh)>Math.max(13d,gpsKmh*0.40d)))) {
++                        speedForGear=gpsKmh;
++                        speedSource="GPS";
++                    }
++                    GearEstimator.Result gear=gearEstimator.update(rpm,speedForGear,now);
++                    estimatedGear=gear.gear; estimatedGearConfidence=gear.confidence;
++                    estimatedGearAt=now; estimatedGearReason=gear.reason;
++                    estimatedGearSource=speedSource; estimatedGearSpeed=(float)speedForGear;
+                     saveTelemetry();
+                     surface.invalidate();
+                     saveHistorySample();
+@@ -179,7 +196,8 @@
+                 .putFloat("mapKpa",(float)mapKpa).putFloat("engineLoad",(float)engineLoadPct)
+                 .putFloat("intakeTemp",(float)intakeTempC).putFloat("stft",(float)shortFuelTrimPct)
+                 .putInt("gearEst",estimatedGear).putInt("gearConf",estimatedGearConfidence)
+-                .putLong("gearAt",estimatedGearAt)
++                .putString("gearReason",estimatedGearReason).putString("gearSource",estimatedGearSource)
++                .putFloat("gearSpeed",estimatedGearSpeed).putLong("gearAt",estimatedGearAt)
+                 .putLong("lastUpdate",System.currentTimeMillis()).apply();
+     }
+ 
+@@ -434,7 +452,11 @@
+             boolean gearFresh=obdConnected && estimatedGear>=1 && estimatedGear<=5
+                     && estimatedGearConfidence>=55 && estimatedGearAt>0
+                     && System.currentTimeMillis()-estimatedGearAt<10000L;
+-            txt(c,gearFresh?(estimatedGear+"ª   EST."):"—  EST.",614,646,34,
++            String gearDisplay=gearFresh?(estimatedGear+"ª  EST."):
++                !obdConnected?"— · SEM OBD2":
++                estimatedGearAt<=0||System.currentTimeMillis()-estimatedGearAt>10000L?
++                "— · SEM DADOS":"— · "+estimatedGearReason;
++            txt(c,gearDisplay,614,646,gearFresh?35:28,
+                     gearFresh?Color.rgb(58,199,239):Color.rgb(176,190,205),true);
+             txt(c,"CONSUMO ESTIMADO",1136,602,24,Color.rgb(164,193,213),false);
+             txt(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1136,646,34,Color.WHITE,true);
+@@ -539,6 +561,7 @@
+                     }
+                 }else if(x>1525 && y<110)showSettings();
+                 else if(y>=573 && y<=690 && x<560)chooseObdDevice();
++                else if(y>=573 && y<=690 && x<1045)showGearDiagnostics();
+                 else if(y>=573 && y<=690)openDashboards();
+                 else if(x>495&&x<1140&&y>110&&y<555)safeStart(new Intent(MainActivity.this,NovaActivity.class));
+                 else if(y>130&&y<546)openDashboards();
+@@ -564,6 +587,24 @@
+         openApplicationCatalog(true,1);
+     }
+     private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
++    private void showGearDiagnostics(){
++        long now=System.currentTimeMillis();
++        boolean gpsFresh=lastGpsTime>0 && now-lastGpsTime<7000L && gpsKmh>=0;
++        boolean gearFresh=estimatedGearAt>0 && now-estimatedGearAt<10000L &&
++                obdConnected && estimatedGear>0 && estimatedGearConfidence>=55;
++        String message="Marcha: "+(gearFresh?estimatedGear+"ª EST.":"indisponível")+"\n"
++            +"Estado: "+estimatedGearReason+"\n"
++            +"RPM: "+(rpm>=0?String.format(PT,"%.0f rpm",rpm):"sem leitura")+"\n"
++            +"Velocidade OBD2: "+(obdSpeed>=0?obdSpeed+" km/h":"sem leitura")+"\n"
++            +"Velocidade GPS: "+(gpsFresh?String.format(PT,"%.0f km/h",gpsKmh):"sem sinal recente")+"\n"
++            +"Fonte usada: "+estimatedGearSource+"\n"
++            +(gearFresh?"Confiança indicativa: "+estimatedGearConfidence+"%\n":"")
++            +"\nA estimativa exige movimento (12 km/h ou mais) e RPM válido."
++            +" Conversor de torque e troca de marcha podem impedir a identificação."
++            +" Não representa P/R/N/D nem leitura direta do câmbio.";
++        new AlertDialog.Builder(this).setTitle("Civic Drive · Marcha estimada")
++            .setMessage(message).setPositiveButton("Entendi",null).show();
++    }
+     private void showMenu() {
+         final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube / segundo plano","Bluetooth","Atualizar pelo GitHub","Ajustes"};
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
+@@ -614,7 +655,7 @@
+                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                         case 9:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.6")
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.8")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
