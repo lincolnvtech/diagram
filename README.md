@@ -1,19 +1,22 @@
-# CIVIC G8 — BAIXAR APK
+# CIVIC G8 — DOWNLOAD DO APK
 
-## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.6)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
+## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.7)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
 
-**Versão publicada:** 1.9.6 · Honda Civic G8 2011 · Android 7.0+.
+**Versão atual:** 1.9.7 · Honda Civic G8 2011 · Android 7.0+.
 
-**Na central multimídia:** abra `github.com/lincolnvtech/diagram`, ou no Civic Drive instalado abra **Menu → Atualizar pelo GitHub → Baixar → Instalar**. O APK 1.9.6 utiliza a mesma assinatura digital permanente, sem precisar desinstalar a versão 1.9.5.
+**Atualizar na multimídia:** no Civic Drive, escolha **Menu → Atualizar pelo GitHub → Baixar → Instalar**. A v1.9.7 usa a mesma assinatura digital permanente da v1.9.6; instale por cima sem desinstalar.
 
-### Novidades da 1.9.6
+### O que mudou na v1.9.7
 
-- **Relógios explicativos:** toque em cada instrumento para ler o que ele mede, comportamento esperado e situações que exigem atenção.
-- **Faixas coloridas de referência** em arrefecimento, RPM e tensão; demais sensores não são marcados como defeituosos sem contexto, pois variam com carga, temperatura externa e operação.
-- **Marcha automática estimada:** RPM + velocidade + relações das cinco marchas da tabela técnica oficial Honda Brasil 2011. Só apresenta 1ª–5ª se três leituras consecutivas tiverem boa correspondência. Mostra `EST.`, nunca como leitura confirmada do câmbio. Em baixa velocidade, conversor patinando ou sem sensor, mostra `—`. A posição PRND real ainda **não é lida**.
-- **YouTube:** Menu → YouTube / segundo plano. Abrir YouTube Music/YouTube e configurações individuais de bateria do Android. O aplicativo não consegue desbloquear reprodução de músicas em segundo plano sem Premium e não controla a política de execução da central.
-- **Home, dashboards Full Tech, reconexão ELM327 e assinatura permanente:** preservados.
+- **Correção específica no OBD2:** quando a leitura de tensão `ATRV` expirava, uma resposta ausente podia gerar exceção e derrubar toda a conexão Bluetooth. Agora essa ausência não provoca fechamento da sessão.
+- **Consultas mais leves:** RPM e velocidade mantidos como prioridade; arrefecimento e tensão em rodízio; sensores extras consultados com menor frequência.
+- **Tolerância:** pequenas falhas de leitura não provocam reconexão imediata. Após perda prolongada de comunicação, o aplicativo ainda tenta reconectar automaticamente.
+- **Dados antigos não são usados na marcha estimada:** RPM/velocidade sem leitura recente ficam indisponíveis.
+- **Marcha na home:** a faixa inferior agora mostra OBD2 | **MARCHA ESTIMADA** | CONSUMO. Exemplo: `3ª EST.`; sem confiança, mostra `— EST.`. A temperatura de arrefecimento permanece no mostrador esquerdo.
+- **Home, estilo Full Tech, painéis e assinatura:** preservados.
 
-**Observação:** os limites coloridos são orientativos, não diagnóstico nem substituto dos instrumentos originais. O modelo de estimativa assume pneus 205/55 R16 originais; outras medidas ou patinação podem invalidar o resultado. Teste com o carro parado; nunca interaja com a multimídia ao dirigir.
+**Atenção:** a marcha é calculada a partir do RPM e velocidade fornecidos pelo ELM327, não pelo módulo da transmissão. Em baixa velocidade, patinação do conversor e trocas, ela pode desaparecer ou ficar incerta. A posição real PRND não é lida.
 
-[Baixar diretamente a v1.9.6](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.6.apk)
+**Validação:** compilação, assinatura e SHA-256 passaram no GitHub Actions, mas a estabilidade Bluetooth e o comportamento na central física ainda precisam ser testados. Feche o Torque Pro e outros aplicativos que possam estar usando o mesmo adaptador ELM327 durante o teste. Não opere a multimídia dirigindo.
+
+[Baixar especificamente o APK v1.9.7](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.7.apk)
