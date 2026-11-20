@@ -1,0 +1,307 @@
+diff -ruN '--exclude=*.orig' '--exclude=*.webp' civic196baseline/README.md civic196build/README.md
+--- civic196baseline/README.md	2026-11-19 19:31:00.000000000 +0000
++++ civic196build/README.md	2026-11-20 19:16:44.288103353 +0000
+@@ -71,3 +71,9 @@
+ ## v1.9.5
+ 
+ Visual full-tech aplicado nas páginas Velocímetro e Contagiros, seguindo as artes aprovadas. Sem telemetria de demonstração; OBD2 e identificação Android/assinatura preservados.
++
++## v1.9.6
++
++- Relógios com faixas visuais orientativas e explicação ao toque, sem inventar diagnósticos de MAP/carga/IAT.
++- Marcha automática ESTIMADA por RPM + velocidade com as relações 5AT oficiais Honda Brasil e medida de pneu original 205/55R16. Confiança mínima, estabilização de 3 leituras e indicação — quando não confiável. PRND real permanece não lido. Não interfere na ECU.
++- Menu YouTube/segundo plano: abre apps e configurações de bateria do Android; **não contorna a necessidade de Premium** para reprodução de músicas em segundo plano.
+diff -ruN '--exclude=*.orig' '--exclude=*.webp' civic196baseline/app/build.gradle civic196build/app/build.gradle
+--- civic196baseline/app/build.gradle	2026-11-19 19:29:58.000000000 +0000
++++ civic196build/app/build.gradle	2026-11-20 19:16:04.870346492 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 15
+-        versionName '1.9.5'
++        versionCode 16
++        versionName '1.9.6'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=*.orig' '--exclude=*.webp' civic196baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java civic196build/app/src/main/java/br/com/civicdrive/DashboardActivity.java
+--- civic196baseline/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-19 19:29:58.000000000 +0000
++++ civic196build/app/src/main/java/br/com/civicdrive/DashboardActivity.java	2026-11-20 19:16:04.870172244 +0000
+@@ -54,6 +54,7 @@
+ 
+     private final class Data {
+         final boolean online, fresh, gpsValid;
++        final int gearEst,gearConf;
+         final float rpm,ect,load,map,iat,voltage,stft,speed,trip,avg,rate,fuelLitres;
+         Data(){
+             SharedPreferences p=getSharedPreferences("civic_telemetry",MODE_PRIVATE);
+@@ -75,6 +76,9 @@
+             avg=p.getFloat("kmL",-1f);
+             rate=online?p.getFloat("fuelRate",-1f):-1f;
+             fuelLitres=getSharedPreferences("civic_fuel_manual",MODE_PRIVATE).getFloat("litres",-1f);
++            boolean gearFresh=System.currentTimeMillis()-p.getLong("gearAt",0L)<13000L;
++            gearEst=online&&gearFresh?p.getInt("gearEst",0):0;
++            gearConf=gearEst>0?p.getInt("gearConf",0):0;
+         }
+         float range(){return fuelLitres>=0&&avg>0?fuelLitres*avg:-1f;}
+     }
+@@ -173,6 +177,22 @@
+                 line(c,cx+inner*cs,cy+inner*sn,cx+outer*cs,cy+outer*sn,a(WHITE,i%4==0?210:95),i%4==0?2.9f:1.3f);
+             }
+             boolean available=value>-900 && (value>=0 || name.equals("IAT") || name.equals("STFT")) && !Float.isNaN(value);
++            // Guia visual: marcações de referência. MAP/IAT/carga dependem do uso do motor;
++            // ausência de limite confiável = somente medidor, sem faixa de defeito.
++            float band1=-1,band2=-1;
++            if(name.equals("ARREFECIMENTO")){band1=102;band2=110;}
++            else if(name.equals("RPM")){band1=3500;band2=6000;}
++            else if(name.equals("TENSÃO")||name.equals("BATERIA")){band1=14.9f;band2=15.4f;}
++            if(band1>=0){
++                RectF ring=new RectF(cx-radius+12,cy-radius+12,cx+radius-12,cy+radius-12);
++                float t1=Math.max(0,Math.min(1,(band1-min)/(max-min)));
++                float t2=Math.max(t1,Math.min(1,(band2-min)/(max-min)));
++                set(CYAN);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3.2f);
++                p.setColor(a(CYAN,140));c.drawArc(ring,start,sweep*t1,false,p);
++                p.setColor(a(WARN,155));c.drawArc(ring,start+sweep*t1,sweep*(t2-t1),false,p);
++                p.setColor(a(WARN,220));c.drawArc(ring,start+sweep*t2,sweep*(1-t2),false,p);
++                p.setStyle(Paint.Style.FILL);
++            }
+             if(available){
+                 float f=Math.max(0,Math.min(1,(value-min)/(max-min)));
+                 set(color);p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeWidth(extraLarge?12:7.5f);
+@@ -233,6 +253,16 @@
+             set(a(CYAN,35));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(11);
+             c.drawArc(arc,start,sweep,false,p);p.setStyle(Paint.Style.FILL);
+             if(valid)glowArc(c,arc,start,sweep*value/maximum,highlight,7f);
++            // Conta-giros: zonas indicativas sem confundir giro alto com falha.
++            if(tach){
++                RectF bands=new RectF(cx-r+11,cy-r+11,cx+r-11,cy+r-11);
++                float normal=3500/maximum, advisory=6000/maximum;
++                set(CYAN);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(4f);
++                p.setColor(a(CYAN,145));c.drawArc(bands,start,sweep*normal,false,p);
++                p.setColor(a(BLUE,210));c.drawArc(bands,start+sweep*normal,sweep*(advisory-normal),false,p);
++                p.setColor(a(WARN,220));c.drawArc(bands,start+sweep*advisory,sweep*(1-advisory),false,p);
++                p.setStyle(Paint.Style.FILL);
++            }
+             for(int i=0;i<=44;i++){
+                 float theta=(float)Math.toRadians(start+240f*i/44f);
+                 float cA=(float)Math.cos(theta),sA=(float)Math.sin(theta);
+@@ -274,8 +304,15 @@
+             line(c,x+493,y+12,x+493,y+53,a(CYAN,90),1.3f);
+             label(c,right,x+518,y+43,21,MUTED,false,false);
+         }
++        private void gearChip(Canvas c,float x,float y){
++            backdropCard(c,x,y,225,109);
++            label(c,"MARCHA EST.",x+21,y+31,21,MUTED,false,false);
++            label(c,d.gearEst>0?d.gearEst+"ª":"—",x+21,y+85,52,d.gearEst>0?CYAN:WHITE,true,false);
++            label(c,"PRND: não lido",x+94,y+83,15,MUTED,false,false);
++        }
+         private void speedPage(Canvas c){
+             // Main 220km/h HUD dial, GPS card, two ancillary instruments.
++            gearChip(c,1170,184);
+             hudField(c,822,436,285);
+             heroDial(c,820,454,282,d.speed,220,"VELOCIDADE", "km/h",false);
+             if(frontTech!=null){set(Color.WHITE);p.setAlpha(186);
+@@ -292,6 +329,7 @@
+         }
+         private void rpmPage(Canvas c){
+             // Performance tachometer with large dial and 4 true ECU sensor readings.
++            gearChip(c,1170,184);
+             hudField(c,820,436,290);
+             heroDial(c,820,444,284,d.rpm,8000,"ROTAÇÃO", "×1000 RPM",true);
+             if(engine!=null){set(Color.WHITE);p.setAlpha(172);
+@@ -323,6 +361,25 @@
+             smallCard(c,1220,493,372,144,"COMBUSTÍVEL INFORMADO",reading(d.fuelLitres,1,"L"),"Toque para alterar");
+             label(c,"Autonomia depende do consumo estimado e do combustível inserido manualmente.",824,736,20,MUTED,false,true);
+         }
++        private void help(String subject){
++            String desc;
++            switch(subject){
++                case "RPM":desc="Rotação do motor em voltas por minuto. Azul até 3.500 RPM, faixa de giro elevado acima disso e âmbar a partir de 6.000. São referências visuais, não limite oficial de falha.";break;
++                case "ARREFECIMENTO":desc="Temperatura do líquido de arrefecimento (ECT). Motor frio abaixo de ~70 °C; normalmente aquecido em torno de 80–102 °C. Atenção acima de 103 °C, alerta elevado a partir de 110 °C. Referência orientativa, não especificação de alarme Honda. Se houver superaquecimento, pare em segurança.";break;
++                case "TENSÃO":case "BATERIA":desc="Tensão elétrica medida pelo adaptador ELM327. Com o motor funcionando, aproximadamente 13–15 V costuma indicar carga, mas o alternador varia a tensão. Valores fora da faixa repetidamente precisam de verificação.";break;
++                case "MAP":desc="Pressão absoluta do coletor de admissão em kPa. Varia com altitude e aceleração: alto não significa defeito sozinho. Compare com marcha lenta e carga.";break;
++                case "IAT":desc="Temperatura do ar admitido. Muda com clima, trânsito e calor do motor; não há uma faixa verde universal.";break;
++                case "CARGA MOTOR":desc="Carga calculada pela ECU em %. Aumenta ao acelerar ou subir ladeiras; 100% não significa falha por si só.";break;
++                case "STFT":desc="Correção rápida de combustível. Perto de zero em regime estável é comum; valores persistentes acima de ±20% merecem diagnóstico, não indicação de falha isolada.";break;
++                case "VELOCIDADE":desc="Velocidade fornecida por GPS ou ELM327. As faixas legais mudam conforme a via. Use o painel original como referência.";break;
++                case "MARCHA":desc="A marcha é apenas uma estimativa local feita com RPM, velocidade e relações oficiais da caixa automática Honda 2011. O conversor de torque pode patinar e as borboletas mudam o giro. P/R/N/D não estão sendo medidos; exibimos — se não for confiável.";break;
++                case "AUTONOMIA":desc="Autonomia aproximada = consumo médio estimado × litros restantes informados manualmente. O Civic Drive não mede o nível real do tanque.";break;
++                default:desc="Os números dependem da leitura do ELM327. Marcadores azuis e âmbar são orientativos, não equivalem ao diagnóstico de uma oficina.";
++            }
++            new AlertDialog.Builder(DashboardActivity.this).setTitle(subject+" · Como interpretar")
++                .setMessage(desc+"\n\nNão consulte enquanto dirige.")
++                .setPositiveButton("Entendi",null).show();
++        }
+         private void showFuelDialog(){
+             EditText input=new EditText(DashboardActivity.this);
+             input.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+@@ -379,11 +436,25 @@
+                     else if(idx==1)startActivity(new Intent(DashboardActivity.this,CarHistoryActivity.class));
+                     else if(idx==2)showFuelDialog();else finish();
+                 }).show();return true;}
++            if((page==0||page==1) && x>1160&&x<1410&&y>=184&&y<293){help("MARCHA");return true;}
++            if(page==0){
++                if(x>530&&x<1140){help("VELOCIDADE");return true;}
++                if(x<470){help("ARREFECIMENTO");return true;}
++                if(x>1245){help(y<490?"RPM":"BATERIA");return true;}
++            }
++            if(page==1){
++                if(x>530&&x<1140){help("RPM");return true;}
++                if(x<480){help(y<490?"ARREFECIMENTO":"MAP");return true;}
++                if(x>1220){help(y<490?"IAT":"CARGA MOTOR");return true;}
++            }
+             if(page==3 && x>1160&&y>455&&y<650){showFuelDialog();return true;}
+             if(page==3 && x>520&&x<1140&&y>185&&y<680){showFuelDialog();return true;}
+-            if(page==2){new AlertDialog.Builder(DashboardActivity.this).setTitle("Sensores do Civic")
+-                .setMessage("ECT, RPM, MAP, carga, IAT, tensão e STFT só mostram dados quando o ELM327 responde. Leituras âmbar são avisos preventivos, não diagnóstico. Não apague falhas enquanto dirige.")
+-                .setPositiveButton("Fechar",null).show();return true;}
++            if(page==2){
++                if(y<455)help(x<490?"ARREFECIMENTO":x>1180?"CARGA MOTOR":"SENSORES");
++                else help(x<405?"MAP":x<810?"IAT":x<1230?"TENSÃO":"STFT");
++                return true;
++            }
++            if(page==3){help("AUTONOMIA");return true;}
+             return true;
+         }
+         @Override public boolean performClick(){super.performClick();return true;}
+diff -ruN '--exclude=*.orig' '--exclude=*.webp' civic196baseline/app/src/main/java/br/com/civicdrive/GearEstimator.java civic196build/app/src/main/java/br/com/civicdrive/GearEstimator.java
+--- civic196baseline/app/src/main/java/br/com/civicdrive/GearEstimator.java	1970-01-01 00:00:00.000000000 +0000
++++ civic196build/app/src/main/java/br/com/civicdrive/GearEstimator.java	2026-11-20 19:16:04.867686914 +0000
+@@ -0,0 +1,45 @@
++package br.com.civicdrive;
++
++/** Marcha PROVAVEL: cálculo somente local, não é a posição real do seletor PRND.
++ * Relações retiradas de Honda Brasil, informações técnicas Civic 2011 5AT.
++ * Rodas originais: 205/55R16. A patinação do conversor pode invalidar a leitura.
++ */
++public final class GearEstimator {
++    private static final double[] GEARS = {2.666, 1.534, 1.021, 0.720, 0.524};
++    private static final double FINAL = 4.437;
++    private static final double DIAMETER_M = (16d*25.4d+2d*205d*0.55d)/1000d;
++    private static final double WHEEL_RPM_PER_KMH = 1000d/(Math.PI*DIAMETER_M*60d);
++    private int candidate = 0, count = 0, last = 0;
++    private int lastScore = 0;
++    private long lastAt = 0;
++    public static final class Result {
++        public final int gear, confidence;
++        private Result(int gear,int confidence){this.gear=gear;this.confidence=confidence;}
++    }
++    /** Requer marcha consistente por 3 amostras, velocidade e giro válidos. */
++    public Result update(double rpm, double kmh, long timestamp) {
++        if (timestamp-lastAt>16000 || timestamp<lastAt) {candidate=0;count=0;last=0;}
++        lastAt=timestamp;
++        if (!Double.isFinite(rpm)||!Double.isFinite(kmh)||rpm<850||rpm>6900||kmh<22||kmh>210) {
++            candidate=0;count=0;last=0;lastScore=0;return new Result(0,0);
++        }
++        double actual=rpm/kmh, bestError=Double.MAX_VALUE, secondError=Double.MAX_VALUE;
++        int best=0;
++        for(int i=0;i<GEARS.length;i++){
++            double expected=GEARS[i]*FINAL*WHEEL_RPM_PER_KMH;
++            double err=Math.abs(actual-expected)/expected;
++            if(err<bestError){secondError=bestError;bestError=err;best=i+1;}
++            else if(err<secondError)secondError=err;
++        }
++        // Alta velocidade exige correspondência mais restrita; nenhuma marcha
++        // deve ser apresentada quando há patinação forte do conversor.
++        double tolerance=kmh<40 ? .16 : .115;
++        if(bestError>tolerance || secondError-bestError<.095){
++            candidate=0;count=0;last=0;lastScore=0;return new Result(0,0);
++        }
++        int score=Math.max(0,Math.min(99,(int)Math.round(98-bestError*270)));
++        if(best!=candidate){candidate=best;count=1;last=0;}else count=Math.min(20,count+1);
++        if(count>=3) {last=best;lastScore=score;}
++        return new Result(last,last==0?0:lastScore);
++    }
++}
+diff -ruN '--exclude=*.orig' '--exclude=*.webp' civic196baseline/app/src/main/java/br/com/civicdrive/MainActivity.java civic196build/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- civic196baseline/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-19 16:00:08.000000000 +0000
++++ civic196build/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 19:16:04.869479298 +0000
+@@ -71,6 +71,9 @@
+     private float volts = -1f;
+     private double mapKpa = -1, engineLoadPct = -1, intakeTempC = -999, shortFuelTrimPct = -999;
+     private double avgKmL = -1d, fuelLitresPerHour = -1d, tripDistanceKm = 0d, tripFuelLitres = 0d;
++    private final GearEstimator gearEstimator=new GearEstimator();
++    private int estimatedGear=0,estimatedGearConfidence=0;
++    private long estimatedGearAt=0L;
+     private long lastFuelMs = 0L;
+     private long lastHistorySample = 0L;
+     private static final String HOME_PREFS = "civic_shortcuts";
+@@ -104,6 +107,7 @@
+                     obdConnected = connected;
+                     if (!connected) { rpm = -1; coolant = -999; volts = -1; obdSpeed = -1;
+                         fuelLitresPerHour = -1; lastFuelMs = 0;
++                        estimatedGear=0;estimatedGearConfidence=0;estimatedGearAt=0;
+                         mapKpa=-1; engineLoadPct=-1; intakeTempC=-999; shortFuelTrimPct=-999;
+                         nextObdRetryMs = System.currentTimeMillis() + 12000L;
+                     } else nextObdRetryMs = 0L;
+@@ -114,6 +118,8 @@
+             @Override public void onValues(double valueRpm, int temperature, float voltage, int speed) {
+                 runOnUiThread(() -> {
+                     rpm = valueRpm; coolant = temperature; volts = voltage; obdSpeed = speed;
++                    GearEstimator.Result gear=gearEstimator.update(rpm, obdSpeed>=0?obdSpeed:gpsKmh, System.currentTimeMillis());
++                    estimatedGear=gear.gear; estimatedGearConfidence=gear.confidence; estimatedGearAt=System.currentTimeMillis();
+                     saveTelemetry();
+                     surface.invalidate();
+                     saveHistorySample();
+@@ -172,6 +178,8 @@
+                 .putFloat("tripKm",(float)tripDistanceKm).putFloat("tripL",(float)tripFuelLitres)
+                 .putFloat("mapKpa",(float)mapKpa).putFloat("engineLoad",(float)engineLoadPct)
+                 .putFloat("intakeTemp",(float)intakeTempC).putFloat("stft",(float)shortFuelTrimPct)
++                .putInt("gearEst",estimatedGear).putInt("gearConf",estimatedGearConfidence)
++                .putLong("gearAt",estimatedGearAt)
+                 .putLong("lastUpdate",System.currentTimeMillis()).apply();
+     }
+ 
+@@ -551,7 +559,7 @@
+     }
+     private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
+     private void showMenu() {
+-        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","Bluetooth","Atualizar pelo GitHub","Ajustes"};
++        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube / segundo plano","Bluetooth","Atualizar pelo GitHub","Ajustes"};
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
+                 .setItems(entries,(d,w)->{
+                     switch(w){
+@@ -565,8 +573,9 @@
+                         case 7:openPackage("com.google.android.apps.maps");break;
+                         case 8:openPackage("com.waze");break;
+                         case 9:openMusic();break;
+-                        case 10:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
+-                        case 11:updates.checkForUpdates();break;
++                        case 10:showYoutubeSettings();break;
++                        case 11:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
++                        case 12:updates.checkForUpdates();break;
+                         default:showSettings();
+                     }
+                 }).setNegativeButton("Fechar",null).show();
+@@ -599,7 +608,7 @@
+                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                         case 9:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.4")
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.6")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
+@@ -610,6 +619,21 @@
+         Intent i=getPackageManager().getLaunchIntentForPackage(name);
+         if(i!=null)safeStart(i);else Toast.makeText(this,"App não instalado: "+name,Toast.LENGTH_LONG).show();
+     }
++    private void showYoutubeSettings(){
++        final String music="com.google.android.apps.youtube.music", video="com.google.android.youtube";
++        new AlertDialog.Builder(this).setTitle("YouTube na central")
++            .setMessage("O Civic Drive não fecha o player. A reprodução em segundo plano depende do YouTube/Premium e das opções de bateria do Android.")
++            .setItems(new String[]{"Abrir YouTube Music","Abrir YouTube", "Permissões e bateria: YouTube Music", "Permissões e bateria: YouTube"},(d,i)->{
++                if(i==0)openPackage(music);
++                else if(i==1)openPackage(video);
++                else {
++                    try { Intent settings=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
++                        android.net.Uri.parse("package:"+(i==2?music:video)));
++                        startActivity(settings);
++                    } catch(Exception e){safeStart(new Intent(Settings.ACTION_SETTINGS));}
++                }
++            }).setNegativeButton("Fechar",null).show();
++    }
+     private void openMusic() {
+         Intent i=getPackageManager().getLaunchIntentForPackage("com.spotify.music");
+         if(i==null)i=getPackageManager().getLaunchIntentForPackage("com.google.android.apps.youtube.music");
