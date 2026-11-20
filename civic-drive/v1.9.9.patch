@@ -1,0 +1,222 @@
+diff -ruN '--exclude=*.orig' '--exclude=*.rej' '--exclude=*.webp' '--exclude=*.jpg' '--exclude=README.md' before/app/build.gradle after/app/build.gradle
+--- before/app/build.gradle	2026-11-20 21:11:29.793038817 +0000
++++ after/app/build.gradle	2026-11-20 21:22:57.669668740 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'br.com.civicdrive'
+         minSdk 24
+         targetSdk 35
+-        versionCode 18
+-        versionName '1.9.8'
++        versionCode 19
++        versionName '1.9.9'
+     }
+     compileOptions {
+         sourceCompatibility JavaVersion.VERSION_17
+diff -ruN '--exclude=*.orig' '--exclude=*.rej' '--exclude=*.webp' '--exclude=*.jpg' '--exclude=README.md' before/app/src/main/java/br/com/civicdrive/MainActivity.java after/app/src/main/java/br/com/civicdrive/MainActivity.java
+--- before/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 21:11:29.792763421 +0000
++++ after/app/src/main/java/br/com/civicdrive/MainActivity.java	2026-11-20 21:22:57.669477242 +0000
+@@ -259,7 +259,7 @@
+         private long downAt;
+         private boolean animationRunning = true;
+         private final float[] dockX = {174, 358, 542, 726, 910, 1094, 1278, 1462};
+-        private final String[] dockNames = {"Início","Dash","Waze","Rádio","+","Apps","Fundo","Nova"};
++        private final String[] dockNames = {"Início","Dash","Waze","Rádio","YouTube","Apps","Fundo","Nova"};
+         Ui(){
+             super(MainActivity.this);
+             wallpaper=getSharedPreferences("civic_wallpaper",MODE_PRIVATE).getInt("mode",0);
+@@ -480,8 +480,10 @@
+                     c.drawRoundRect(new RectF(x-25,y-15,x+24,y+23),5,5,p);
+                     c.drawLine(x-22,y-17,x+17,y-31,p);c.drawCircle(x+10,y+4,7,p);
+                     c.drawLine(x-18,y-6,x-2,y-6,p);break;
+-                case 4: // Add
+-                    c.drawLine(x-18,y,x+18,y,p);c.drawLine(x,y-18,x,y+18,p);break;
++                case 4: // YouTube - ícone play; não confundir com o botão de adicionar
++                    c.drawRoundRect(new RectF(x-27,y-19,x+27,y+19),8,8,p);
++                    shape.moveTo(x-7,y-11);shape.lineTo(x+12,y);
++                    shape.lineTo(x-7,y+11);shape.close();c.drawPath(shape,p);break;
+                 case 5: // Apps
+                     for(int col=-1;col<=1;col++)for(int row=-1;row<=1;row++){
+                         c.drawRoundRect(new RectF(x+col*14-4,y+row*14-4,x+col*14+4,y+row*14+4),2,2,p);
+@@ -552,9 +554,9 @@
+                     switch(idx){
+                         case 0:break;
+                         case 1:openDashboards();break;
+-                        case 2:if(slotPackage(0).isEmpty())openPackage("com.waze");else openShortcut(0);break;
++                        case 2:if(slotPackage(0).isEmpty())openWaze();else openShortcut(0);break;
+                         case 3:if(slotPackage(1).isEmpty())openRadio();else openShortcut(1);break;
+-                        case 4:openShortcut(2);break;
++                        case 4:if(slotPackage(2).isEmpty())openYouTube();else openShortcut(2);break;
+                         case 5:showInstalledApps();break;
+                         case 6:pickWallpaper();break;
+                         case 7:safeStart(new Intent(MainActivity.this,NovaActivity.class));break;
+@@ -606,7 +608,7 @@
+             .setMessage(message).setPositiveButton("Entendi",null).show();
+     }
+     private void showMenu() {
+-        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube / segundo plano","Bluetooth","Atualizar pelo GitHub","Ajustes"};
++        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube e som","Bluetooth","Atualizar pelo GitHub","Ajustes"};
+         new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
+                 .setItems(entries,(d,w)->{
+                     switch(w){
+@@ -618,7 +620,7 @@
+                         case 5:safeStart(new Intent(this,NovaActivity.class));break;
+                         case 6:chooseObdDevice();break;
+                         case 7:openPackage("com.google.android.apps.maps");break;
+-                        case 8:openPackage("com.waze");break;
++                        case 8:openWaze();break;
+                         case 9:openMusic();break;
+                         case 10:showYoutubeSettings();break;
+                         case 11:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
+@@ -655,7 +657,7 @@
+                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
+                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                         case 9:requestGps();break;
+-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.8")
++                        default:new AlertDialog.Builder(this).setTitle("Civic G8 1.9.9")
+                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
+                             .setPositiveButton("OK",null).show();
+                     }
+@@ -666,25 +668,131 @@
+         Intent i=getPackageManager().getLaunchIntentForPackage(name);
+         if(i!=null)safeStart(i);else Toast.makeText(this,"App não instalado: "+name,Toast.LENGTH_LONG).show();
+     }
++    private void openWaze(){
++        openAppOrWebsite("com.waze","https://waze.com/ul");
++    }
++    private void openYouTube(){
++        openAppOrWebsite("com.google.android.youtube","https://www.youtube.com/");
++    }
++    private void openAppOrWebsite(String packageName,String website){
++        Intent launch=getPackageManager().getLaunchIntentForPackage(packageName);
++        if(launch!=null){safeStart(launch);return;}
++        // Algumas centrais não têm Google Play Services nem YouTube instalado.
++        // Não embutir player WebView que perderia áudio ao sair da tela.
++        try{
++            Intent browser=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(website));
++            browser.addCategory(Intent.CATEGORY_BROWSABLE);
++            startActivity(browser);
++        }catch(Exception ex){
++            Toast.makeText(this,"Instale ou habilite o app nesta central",Toast.LENGTH_LONG).show();
++        }
++    }
++    private void appBatterySettings(String packageName){
++        try {
++            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
++                    android.net.Uri.parse("package:"+packageName)));
++        }catch(Exception e){safeStart(new Intent(Settings.ACTION_SETTINGS));}
++    }
+     private void showYoutubeSettings(){
+-        final String music="com.google.android.apps.youtube.music", video="com.google.android.youtube";
+-        new AlertDialog.Builder(this).setTitle("YouTube na central")
+-            .setMessage("O Civic Drive não fecha o player. A reprodução em segundo plano depende do YouTube/Premium e das opções de bateria do Android.")
+-            .setItems(new String[]{"Abrir YouTube Music","Abrir YouTube", "Permissões e bateria: YouTube Music", "Permissões e bateria: YouTube"},(d,i)->{
+-                if(i==0)openPackage(music);
+-                else if(i==1)openPackage(video);
+-                else {
+-                    try { Intent settings=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+-                        android.net.Uri.parse("package:"+(i==2?music:video)));
+-                        startActivity(settings);
+-                    } catch(Exception e){safeStart(new Intent(Settings.ACTION_SETTINGS));}
++        final String music="com.google.android.apps.youtube.music";
++        final String video="com.google.android.youtube";
++        new AlertDialog.Builder(this).setTitle("YouTube e áudio da central")
++            .setMessage("O iPhone toca pelo canal Bluetooth/CarPlay, mas o YouTube instalado "
++                +"na central usa o áudio do Android. São rotas diferentes. "
++                +"Se não sair som, teste primeiro a saída do Android com o carro parado. "
++                +"O áudio em segundo plano do YouTube depende das regras do serviço e do Premium.")
++            .setItems(new String[]{
++                "Abrir YouTube",
++                "Abrir YouTube Music",
++                "Diagnóstico de som do Android",
++                "Volume e ajustes de som",
++                "Bateria / permissões do YouTube",
++                "Bateria / permissões do YouTube Music",
++                "Configurações Bluetooth"
++            },(d,i)->{
++                switch(i){
++                    case 0:openYouTube();break;
++                    case 1:openAppOrWebsite(music,"https://music.youtube.com/");break;
++                    case 2:showAudioDiagnostics();break;
++                    case 3:safeStart(new Intent(Settings.ACTION_SOUND_SETTINGS));break;
++                    case 4:appBatterySettings(video);break;
++                    case 5:appBatterySettings(music);break;
++                    case 6:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
+                 }
+             }).setNegativeButton("Fechar",null).show();
+     }
++    /** Teste de saída do Android, NÃO é um player de YouTube ou de som do iPhone. */
++    private void showAudioDiagnostics(){
++        android.media.AudioManager audio=(android.media.AudioManager)getSystemService(Context.AUDIO_SERVICE);
++        int current=0,max=0;
++        if(audio!=null){
++            current=audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC);
++            max=audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
++        }
++        StringBuilder outputs=new StringBuilder();
++        if(audio!=null && Build.VERSION.SDK_INT>=23){
++            try {
++                for(android.media.AudioDeviceInfo device:audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)){
++                    if(outputs.length()>0)outputs.append(", ");
++                    switch(device.getType()){
++                        case android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER:outputs.append("alto-falante Android");break;
++                        case android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:outputs.append("Bluetooth A2DP");break;
++                        case android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES:outputs.append("fones");break;
++                        case android.media.AudioDeviceInfo.TYPE_AUX_LINE:outputs.append("AUX");break;
++                        case android.media.AudioDeviceInfo.TYPE_USB_DEVICE:outputs.append("áudio USB");break;
++                        default:outputs.append("saída ").append(device.getType());break;
++                    }
++                }
++            }catch(Exception ignored){outputs.append("não identificada");}
++        }
++        new AlertDialog.Builder(this).setTitle("Áudio nativo da multimídia")
++            .setMessage("Volume de mídia do Android: "+current+"/"+max+".\n"
++                +"Saídas detectadas: "+(outputs.length()==0?"não identificadas":outputs.toString())
++                +".\n\nO som do iPhone via Bluetooth/CarPlay não comprova que a fonte Android "
++                +"esteja selecionada na central. Ajuste a fonte MEDIA/ANDROID/APP "
++                +"e o volume de mídia da central.\n\n"
++                +"Toque em TESTAR SOM para tocar um aviso bem curto e baixo. "
++                +"Faça o teste com o carro parado.")
++            .setPositiveButton("TESTAR SOM",(d,i)->playAndroidAudioTest())
++            .setNeutralButton("AJUSTAR SOM",(d,i)->safeStart(new Intent(Settings.ACTION_SOUND_SETTINGS)))
++            .setNegativeButton("Fechar",null).show();
++    }
++    private void playAndroidAudioTest(){
++        // Som PCM de 0,35s, 660Hz, volume baixo e fade, somente quando solicitado.
++        // Não força volume, não contorna proteções do YouTube e não toma controle do BT.
++        android.media.AudioTrack track=null;
++        try {
++            final int sampleRate=22050,samples=7717;
++            short[] sample=new short[samples];
++            for(int i=0;i<samples;i++){
++                double envelope=Math.min(1d,Math.min(i/(sampleRate*.03d),(samples-i-1)/(sampleRate*.06d)));
++                sample[i]=(short)(Math.sin(2d*Math.PI*660d*i/sampleRate)*2200d*Math.max(0d,envelope));
++            }
++            track=new android.media.AudioTrack.Builder()
++                .setAudioAttributes(new android.media.AudioAttributes.Builder()
++                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
++                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
++                .setAudioFormat(new android.media.AudioFormat.Builder()
++                    .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
++                    .setSampleRate(sampleRate)
++                    .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
++                .setBufferSizeInBytes(samples*2)
++                .setTransferMode(android.media.AudioTrack.MODE_STATIC).build();
++            if(track.getState()!=android.media.AudioTrack.STATE_INITIALIZED)throw new IllegalStateException("Áudio Android indisponível");
++            if(track.write(sample,0,sample.length)!=sample.length)throw new IllegalStateException("Não foi possível enviar som");
++            track.play();
++            final android.media.AudioTrack output=track;
++            handler.postDelayed(()->{try {output.stop();}catch(Exception ignored){}output.release();},750L);
++            Toast.makeText(this,"Teste enviado à saída de mídia do Android",Toast.LENGTH_LONG).show();
++        }catch(Exception e){
++            if(track!=null){try{track.release();}catch(Exception ignored){}}
++            Toast.makeText(this,"Áudio do Android indisponível: confira volume e fonte",Toast.LENGTH_LONG).show();
++        }
++    }
+     private void openMusic() {
+         Intent i=getPackageManager().getLaunchIntentForPackage("com.spotify.music");
+         if(i==null)i=getPackageManager().getLaunchIntentForPackage("com.google.android.apps.youtube.music");
+-        if(i!=null)safeStart(i);else showInstalledApps();
++        if(i!=null)safeStart(i);else showYoutubeSettings();
+     }
+     private void safeStart(Intent intent) {
+         try{startActivity(intent);}catch(ActivityNotFoundException|SecurityException e){Toast.makeText(this,"Não disponível nesta central",Toast.LENGTH_LONG).show();}
