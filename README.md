@@ -1,25 +1,23 @@
-# CIVIC G8 — DOWNLOAD DO APK
+# CIVIC G8 — BAIXAR APK
 
-## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.8)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
+## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.9)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
 
-**Versão atual:** 1.9.8 · Honda Civic G8 2011 · Android 7.0+.
+**Versão atual:** 1.9.9 · Honda Civic G8 2011 · Android 7.0+.
 
-### Como atualizar na central
+### Atualizar na central
 
-**Civic Drive → Menu → Atualizar pelo GitHub → Baixar → Instalar.** A v1.9.8 usa a mesma assinatura permanente; instale por cima da 1.9.7, mantendo dados e configurações.
+No Civic Drive: **Menu → Atualizar pelo GitHub → Baixar → Instalar**. Versão 1.9.9 usa a mesma assinatura permanente das anteriores. Não é necessário desinstalar.
 
-### O que foi corrigido na v1.9.8
+### Novidades v1.9.9
 
-- **Marcha estimada mais disponível:** o cálculo deixou de exigir janelas excessivamente rígidas. Ele usa RPM + velocidade e as relações originais do câmbio automático de cinco marchas.
-- **GPS como alternativa:** quando a ECU/ELM327 não entrega velocidade OBD2 ou o dado contradiz fortemente GPS recente, o app pode estimar usando velocidade GPS válida.
-- **No mínimo duas amostras consistentes** e velocidade de 12 km/h ou mais. Quando houver ambiguidade de marcha, patinação do conversor ou ausência de leitura, aparece um motivo em vez de só `— EST.`.
-- **Diagnóstico na home:** toque em **Marcha estimada** na barra inferior para ver RPM, velocidade OBD2, velocidade GPS, fonte escolhida, confiança indicativa e o motivo se não houver marcha.
-- **Home, visual Full Tech, animação Nova e reconexão OBD2:** preservados da versão 1.9.7.
+- **Waze na home:** toque no ícone Waze na barra inferior. Se não estiver instalado, abre o link oficial do Waze no navegador, quando disponível.
+- **YouTube na home:** o antigo botão `+` virou um atalho YouTube na barra inferior. Se não houver um aplicativo personalizado salvo nesse terceiro botão, ele abre diretamente o YouTube nativo; sem aplicativo, tenta abrir o site no navegador. O terceiro botão continua personalizável.
+- **YouTube e som:** Menu → YouTube e som. Inclui YouTube, YouTube Music, diagnóstico do áudio Android, ajustes de volume, permissões de bateria e Bluetooth.
+- **Teste de áudio nativo:** gera um sinal breve de 660 Hz, suave e apenas quando o usuário solicita, para verificar se a saída de mídia da própria central funciona. Não toca no rádio, não altera o volume e não captura microfone.
+- **Áudio do iPhone x áudio Android:** Bluetooth/CarPlay podem utilizar uma rota diferente da saída usada pelos apps nativos da central. Se o teste local não tocar, verificar volume de mídia, canal Android/Media/App e configurações da central. Mesmo com som local funcionando, YouTube ainda pode depender de login, conectividade e compatibilidade do aplicativo.
+- **Segundo plano:** reproduzir YouTube com outro app na frente depende das permissões/benefícios oficiais do YouTube, inclusive Premium para reprodução em segundo plano. O Civic Drive não contorna essas regras.
+- **Módulos de carro:** visual Full Tech, marcha estimada, sensores, ELM327, animação Nova e atualizações assinadas preservados.
 
-**Importante:** indica **1ª a 5ª EST.** e não lê o seletor real P/R/N/D nem o acionamento das borboletas. Este é apenas um cálculo aproximado e pode estar errado, especialmente em aceleração, desaceleração, mudança de marcha ou pneus diferentes do original 205/55R16. Não substitui os instrumentos do veículo.
+**Teste com o carro parado.** Não assista a vídeos nem opere a central ao dirigir. A compilação/assinatura e o SHA-256 do APK passaram; o áudio físico só pode ser validado na multimídia.
 
-**Validação:** o código passou em testes locais de cálculo para cinco marchas, a compilação e a verificação de assinatura passaram no GitHub, e o SHA-256 do APK entregue confere com o manifesto. O desempenho precisa ser testado fisicamente na multimídia.
-
-**Teste com segurança:** permita localização à central para habilitar a alternativa GPS. Não interaja com a tela enquanto dirige; consulte os diagnósticos com o carro parado.
-
-[Baixar especificamente v1.9.8](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.8.apk)
+[Baixar especificamente Civic G8 v1.9.9](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.9.apk)
