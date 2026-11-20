@@ -1,4 +1,4 @@
-# Civic G8 v1.9.5 — full-tech owner-approved speed and tach visual upgrades.
+# Civic G8 v1.9.6 — sensor guidance, YouTube settings, conservative gear estimate.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -15,6 +15,7 @@ on:
       - 'civic-drive/v1.9.4.patch'
       - 'civic-drive/v1.9.4-art.base64'
       - 'civic-drive/v1.9.5.patch'
+      - 'civic-drive/v1.9.6.patch'
       - 'civic-drive/v1.9.5-art.base64'
       - 'civic-drive/v1.9.1-art.base64'
       - 'civic-drive/signing.enc.json'
@@ -81,8 +82,10 @@ jobs:
           base64 --decode civic-drive/v1.9.5-art.base64 > /tmp/civic-v195-art.zip
           unzip -oq /tmp/civic-v195-art.zip -d build-civic
           test -s build-civic/app/src/main/res/drawable-nodpi/civic_dash_front_tech.webp
-          grep -q "versionCode 15" build-civic/app/build.gradle
-          grep -q "versionName '1.9.5'" build-civic/app/build.gradle
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.6.patch)
+          grep -q "versionCode 16" build-civic/app/build.gradle
+          grep -q "versionName '1.9.6'" build-civic/app/build.gradle
+          test -s build-civic/app/src/main/java/br/com/civicdrive/GearEstimator.java
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -119,7 +122,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v1.9.5.apk'
+          signed = root/'civic-drive/civic-drive-v1.9.6.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -141,26 +144,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v1.9.5 validado com assinatura permanente.')
+          print('APK v1.9.6 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v1.9.5.apk
+          APK=civic-drive/civic-drive-v1.9.6.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":15,"versionName":"1.9.5","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.5.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":16,"versionName":"1.9.6","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.6.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v1.9.5.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v1.9.6.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic G8 1.9.5 Full Tech HUD aprovado'
+            git commit -m 'build: Civic G8 1.9.6 sensores, YouTube e marcha estimada'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.9.5-release
-          path: civic-drive/civic-drive-v1.9.5.apk
+          name: civic-g8-v1.9.6-release
+          path: civic-drive/civic-drive-v1.9.6.apk
