@@ -1,22 +1,19 @@
 # CIVIC G8 — BAIXAR APK
 
-## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.5)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
+## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.6)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
 
-**Versão atual:** 1.9.5 · Honda Civic G8 2011 · Android 7.0+.
+**Versão publicada:** 1.9.6 · Honda Civic G8 2011 · Android 7.0+.
 
-**Na central multimídia:** abra `github.com/lincolnvtech/diagram` ou use **Civic Drive → Menu → Atualizar pelo GitHub → Baixar → Instalar**.
+**Na central multimídia:** abra `github.com/lincolnvtech/diagram`, ou no Civic Drive instalado abra **Menu → Atualizar pelo GitHub → Baixar → Instalar**. O APK 1.9.6 utiliza a mesma assinatura digital permanente, sem precisar desinstalar a versão 1.9.5.
 
-A v1.9.5 foi compilada com **a mesma assinatura digital permanente** da v1.9.4. A atualização pode ser instalada por cima, preservando os dados do aplicativo.
+### Novidades da 1.9.6
 
-### Novidades da v1.9.5 — Full Tech
+- **Relógios explicativos:** toque em cada instrumento para ler o que ele mede, comportamento esperado e situações que exigem atenção.
+- **Faixas coloridas de referência** em arrefecimento, RPM e tensão; demais sensores não são marcados como defeituosos sem contexto, pois variam com carga, temperatura externa e operação.
+- **Marcha automática estimada:** RPM + velocidade + relações das cinco marchas da tabela técnica oficial Honda Brasil 2011. Só apresenta 1ª–5ª se três leituras consecutivas tiverem boa correspondência. Mostra `EST.`, nunca como leitura confirmada do câmbio. Em baixa velocidade, conversor patinando ou sem sensor, mostra `—`. A posição PRND real ainda **não é lida**.
+- **YouTube:** Menu → YouTube / segundo plano. Abrir YouTube Music/YouTube e configurações individuais de bateria do Android. O aplicativo não consegue desbloquear reprodução de músicas em segundo plano sem Premium e não controla a política de execução da central.
+- **Home, dashboards Full Tech, reconexão ELM327 e assinatura permanente:** preservados.
 
-- **Velocímetro:** grande mostrador central preto/grafite, escala 0–220 km/h, brilho ciano discreto, detalhe visual do Civic, apoio de GPS, RPM, arrefecimento e tensão.
-- **Contagiros:** mostrador central de 0–8 mil RPM, destaque técnico do motor e medidores laterais de ECT, MAP, IAT e carga, com alertas visuais em âmbar.
-- **Sensores e Autonomia:** permanecem como na versão 1.9.4.
-- **Home e Nova:** mesma aparência aprovada com esfera elétrica animada.
-- **Dados:** todos os números dependem de leitura real; os detalhes do carro e motor são somente decorativos. Nenhum hodômetro, nível do tanque ou pressão de óleo é inventado.
-- **OBD2:** código de comunicação preservado integralmente da 1.9.4.
+**Observação:** os limites coloridos são orientativos, não diagnóstico nem substituto dos instrumentos originais. O modelo de estimativa assume pneus 205/55 R16 originais; outras medidas ou patinação podem invalidar o resultado. Teste com o carro parado; nunca interaja com a multimídia ao dirigir.
 
-**Validação:** compilação, publicação e assinatura passaram no GitHub Actions; a aparência e o desempenho ainda precisam ser testados fisicamente na central. Não opere a interface dirigindo.
-
-[Baixar especificamente a versão 1.9.5](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.5.apk)
+[Baixar diretamente a v1.9.6](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.6.apk)
