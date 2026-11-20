@@ -1,22 +1,25 @@
 # CIVIC G8 — DOWNLOAD DO APK
 
-## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.7)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
+## [📥 BAIXAR CIVIC G8 — VERSÃO MAIS RECENTE (v1.9.8)](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-latest.apk)
 
-**Versão atual:** 1.9.7 · Honda Civic G8 2011 · Android 7.0+.
+**Versão atual:** 1.9.8 · Honda Civic G8 2011 · Android 7.0+.
 
-**Atualizar na multimídia:** no Civic Drive, escolha **Menu → Atualizar pelo GitHub → Baixar → Instalar**. A v1.9.7 usa a mesma assinatura digital permanente da v1.9.6; instale por cima sem desinstalar.
+### Como atualizar na central
 
-### O que mudou na v1.9.7
+**Civic Drive → Menu → Atualizar pelo GitHub → Baixar → Instalar.** A v1.9.8 usa a mesma assinatura permanente; instale por cima da 1.9.7, mantendo dados e configurações.
 
-- **Correção específica no OBD2:** quando a leitura de tensão `ATRV` expirava, uma resposta ausente podia gerar exceção e derrubar toda a conexão Bluetooth. Agora essa ausência não provoca fechamento da sessão.
-- **Consultas mais leves:** RPM e velocidade mantidos como prioridade; arrefecimento e tensão em rodízio; sensores extras consultados com menor frequência.
-- **Tolerância:** pequenas falhas de leitura não provocam reconexão imediata. Após perda prolongada de comunicação, o aplicativo ainda tenta reconectar automaticamente.
-- **Dados antigos não são usados na marcha estimada:** RPM/velocidade sem leitura recente ficam indisponíveis.
-- **Marcha na home:** a faixa inferior agora mostra OBD2 | **MARCHA ESTIMADA** | CONSUMO. Exemplo: `3ª EST.`; sem confiança, mostra `— EST.`. A temperatura de arrefecimento permanece no mostrador esquerdo.
-- **Home, estilo Full Tech, painéis e assinatura:** preservados.
+### O que foi corrigido na v1.9.8
 
-**Atenção:** a marcha é calculada a partir do RPM e velocidade fornecidos pelo ELM327, não pelo módulo da transmissão. Em baixa velocidade, patinação do conversor e trocas, ela pode desaparecer ou ficar incerta. A posição real PRND não é lida.
+- **Marcha estimada mais disponível:** o cálculo deixou de exigir janelas excessivamente rígidas. Ele usa RPM + velocidade e as relações originais do câmbio automático de cinco marchas.
+- **GPS como alternativa:** quando a ECU/ELM327 não entrega velocidade OBD2 ou o dado contradiz fortemente GPS recente, o app pode estimar usando velocidade GPS válida.
+- **No mínimo duas amostras consistentes** e velocidade de 12 km/h ou mais. Quando houver ambiguidade de marcha, patinação do conversor ou ausência de leitura, aparece um motivo em vez de só `— EST.`.
+- **Diagnóstico na home:** toque em **Marcha estimada** na barra inferior para ver RPM, velocidade OBD2, velocidade GPS, fonte escolhida, confiança indicativa e o motivo se não houver marcha.
+- **Home, visual Full Tech, animação Nova e reconexão OBD2:** preservados da versão 1.9.7.
 
-**Validação:** compilação, assinatura e SHA-256 passaram no GitHub Actions, mas a estabilidade Bluetooth e o comportamento na central física ainda precisam ser testados. Feche o Torque Pro e outros aplicativos que possam estar usando o mesmo adaptador ELM327 durante o teste. Não opere a multimídia dirigindo.
+**Importante:** indica **1ª a 5ª EST.** e não lê o seletor real P/R/N/D nem o acionamento das borboletas. Este é apenas um cálculo aproximado e pode estar errado, especialmente em aceleração, desaceleração, mudança de marcha ou pneus diferentes do original 205/55R16. Não substitui os instrumentos do veículo.
 
-[Baixar especificamente o APK v1.9.7](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.7.apk)
+**Validação:** o código passou em testes locais de cálculo para cinco marchas, a compilação e a verificação de assinatura passaram no GitHub, e o SHA-256 do APK entregue confere com o manifesto. O desempenho precisa ser testado fisicamente na multimídia.
+
+**Teste com segurança:** permita localização à central para habilitar a alternativa GPS. Não interaja com a tela enquanto dirige; consulte os diagnósticos com o carro parado.
+
+[Baixar especificamente v1.9.8](https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.8.apk)
