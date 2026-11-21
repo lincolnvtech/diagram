@@ -1,4 +1,4 @@
-# Civic G8 v1.9.12 — reliable OTA cache-busting on top of stable 1.9.11.
+# Civic G8 v2.0.0 — automatic OTA checks and Waze deep-link fallback on stable 1.9.12.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -22,6 +22,7 @@ on:
       - 'civic-drive/v1.9.10-apply.py'
       - 'civic-drive/v1.9.11-apply.py'
       - 'civic-drive/v1.9.12-apply.py'
+      - 'civic-drive/v2.0.0-apply.py'
       - 'civic-drive/v1.9.5-art.base64'
       - 'civic-drive/v1.9.1-art.base64'
       - 'civic-drive/signing.enc.json'
@@ -95,8 +96,9 @@ jobs:
           python3 civic-drive/v1.9.10-apply.py build-civic
           python3 civic-drive/v1.9.11-apply.py build-civic
           python3 civic-drive/v1.9.12-apply.py build-civic
-          grep -q "versionCode 22" build-civic/app/build.gradle
-          grep -q "versionName '1.9.12'" build-civic/app/build.gradle
+          python3 civic-drive/v2.0.0-apply.py build-civic
+          grep -q "versionCode 23" build-civic/app/build.gradle
+          grep -q "versionName '2.0.0'" build-civic/app/build.gradle
           test -s build-civic/app/src/main/java/br/com/civicdrive/GearEstimator.java
       - name: Instalar ferramentas do Android
         shell: bash
@@ -134,7 +136,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v1.9.12.apk'
+          signed = root/'civic-drive/civic-drive-v2.0.0.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -162,14 +164,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v1.9.12.apk
+          APK=civic-drive/civic-drive-v2.0.0.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":22,"versionName":"1.9.12","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v1.9.12.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":23,"versionName":"2.0.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.0.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v1.9.12.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.0.0.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
             git commit -m 'build: Civic G8 1.9.12 consumo sem overlay e marcha rapida'
             git push origin HEAD:civic-drive-build
@@ -177,5 +179,5 @@ jobs:
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v1.9.12-release
-          path: civic-drive/civic-drive-v1.9.12.apk
+          name: civic-g8-v2.0.0-release
+          path: civic-drive/civic-drive-v2.0.0.apk
