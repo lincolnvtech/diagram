@@ -1,4 +1,4 @@
-name: Civic G8 - Auditoria da base v2
+name: Civic G8 - Auditoria da base final
 on:
   push:
     branches: [civic-drive-build]
@@ -12,26 +12,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: civic-drive-build
-      - name: Inspecionar a base Android original sem alterar produção
+      - name: Reconstruir base exata da versão 1.9.12 e auditar
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p source
+          mkdir -p build-civic
           base64 --decode civic-drive/source-zip.base64 > /tmp/civic-source.zip
-          unzip -q /tmp/civic-source.zip -d source
-          echo '=== PROJECT FILES ==='
-          find source/app/src/main -maxdepth 5 -type f | sort
-          echo '=== GRADLE ==='
-          sed -n '1,220p' source/app/build.gradle
-          echo '=== MANIFEST ==='
-          sed -n '1,260p' source/app/src/main/AndroidManifest.xml
-          for f in MainActivity.java DashboardActivity.java ObdManager.java GearEstimator.java UpdateManager.java NovaActivity.java; do
-            p="source/app/src/main/java/br/com/civicdrive/$f"
+          unzip -q /tmp/civic-source.zip -d build-civic
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.6.patch)
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.8.patch)
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.patch)
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.1.patch)
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.2.patch)
+          base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/art191.zip
+          unzip -oq /tmp/art191.zip -d build-civic
+          python3 civic-drive/v1.9.3-apply.py build-civic
+          base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/art193.zip
+          unzip -oq /tmp/art193.zip -d build-civic
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.4.patch)
+          base64 --decode civic-drive/v1.9.4-art.base64 > /tmp/art194.zip
+          unzip -oq /tmp/art194.zip -d build-civic
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.5.patch)
+          base64 --decode civic-drive/v1.9.5-art.base64 > /tmp/art195.zip
+          unzip -oq /tmp/art195.zip -d build-civic
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.6.patch)
+          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.7.patch)
+          (cd build-civic && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.8.patch)
+          (cd build-civic && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.9.patch)
+          python3 civic-drive/v1.9.10-apply.py build-civic
+          python3 civic-drive/v1.9.11-apply.py build-civic
+          python3 civic-drive/v1.9.12-apply.py build-civic
+          echo '=== FINAL FILES ==='
+          find build-civic/app/src/main -type f | sort
+          for f in MainActivity.java DashboardActivity.java ObdManager.java GearEstimator.java UpdateManager.java CivicTheme.java NovaActivity.java NovaClient.java; do
+            p="build-civic/app/src/main/java/br/com/civicdrive/$f"
             if [ -f "$p" ]; then
-              echo "=== $f ==="
-              sed -n '1,420p' "$p"
+              echo "=== $f ($(wc -l < "$p") lines) ==="
+              cat "$p"
             fi
           done
-          echo '=== LAYOUT / DRAWABLE / ASSETS ==='
-          find source/app/src/main/res -maxdepth 3 -type f | sort | head -200
-          find source/app/src/main/assets -maxdepth 3 -type f -print 2>/dev/null || true
+          echo '=== BUILD CONFIG ==='
+          cat build-civic/app/build.gradle
