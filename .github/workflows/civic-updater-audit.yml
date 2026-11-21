@@ -1,0 +1,27 @@
+name: Civic G8 - Auditoria do atualizador
+on:
+  push:
+    branches: [civic-drive-build]
+    paths: ['.github/workflows/civic-updater-audit.yml']
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: civic-drive-build
+      - name: Ler atualizador da fonte original sem executar APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p source
+          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-source.zip
+          unzip -q /tmp/civic-source.zip -d source
+          echo '=== SOURCES WITH UPDATE ==='
+          find source/app/src -type f | grep -Ei 'update|mainactivity' || true
+          echo '=== UPDATE CLASSES ==='
+          find source/app/src -type f \( -iname '*update*.java' -o -iname '*update*.kt' \) -print -exec sed -n '1,300p' {} \;
+          echo '=== MAIN REFERENCES ==='
+          grep -n -i -C 5 -E 'updates\.checkForUpdates|new.*Updater|new.*Update|latest\.json|versionCode' source/app/src/main/java/br/com/civicdrive/MainActivity.java || true
