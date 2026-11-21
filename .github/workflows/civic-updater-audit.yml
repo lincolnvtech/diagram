@@ -1,4 +1,4 @@
-name: Civic G8 - Auditoria do atualizador
+name: Civic G8 - Auditoria da base v2
 on:
   push:
     branches: [civic-drive-build]
@@ -12,16 +12,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: civic-drive-build
-      - name: Ler atualizador da fonte original sem executar APK
+      - name: Inspecionar a base Android original sem alterar produção
         shell: bash
         run: |
           set -Eeuo pipefail
           mkdir -p source
           base64 --decode civic-drive/source-zip.base64 > /tmp/civic-source.zip
           unzip -q /tmp/civic-source.zip -d source
-          echo '=== SOURCES WITH UPDATE ==='
-          find source/app/src -type f | grep -Ei 'update|mainactivity' || true
-          echo '=== UPDATE CLASSES ==='
-          find source/app/src -type f \( -iname '*update*.java' -o -iname '*update*.kt' \) -print -exec sed -n '1,300p' {} \;
-          echo '=== MAIN REFERENCES ==='
-          grep -n -i -C 5 -E 'updates\.checkForUpdates|new.*Updater|new.*Update|latest\.json|versionCode' source/app/src/main/java/br/com/civicdrive/MainActivity.java || true
+          echo '=== PROJECT FILES ==='
+          find source/app/src/main -maxdepth 5 -type f | sort
+          echo '=== GRADLE ==='
+          sed -n '1,220p' source/app/build.gradle
+          echo '=== MANIFEST ==='
+          sed -n '1,260p' source/app/src/main/AndroidManifest.xml
+          for f in MainActivity.java DashboardActivity.java ObdManager.java GearEstimator.java UpdateManager.java NovaActivity.java; do
+            p="source/app/src/main/java/br/com/civicdrive/$f"
+            if [ -f "$p" ]; then
+              echo "=== $f ==="
+              sed -n '1,420p' "$p"
+            fi
+          done
+          echo '=== LAYOUT / DRAWABLE / ASSETS ==='
+          find source/app/src/main/res -maxdepth 3 -type f | sort | head -200
+          find source/app/src/main/assets -maxdepth 3 -type f -print 2>/dev/null || true
