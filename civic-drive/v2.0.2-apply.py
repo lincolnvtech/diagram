@@ -158,12 +158,12 @@ rep("DashboardActivity.java",
                 new int[]{CivicTheme.blend(BG,BLUE,.25f),BG,CivicTheme.blend(BG,Color.BLACK,.50f)},
                 null,Shader.TileMode.CLAMP));''')
 rep("DashboardActivity.java",
-'''                 new int[]{Color.argb(24,0,152,229),Color.argb(11,0,69,130),Color.TRANSPARENT},
-                 null,Shader.TileMode.CLAMP));''',
+'''                new int[]{Color.argb(24,0,152,229),Color.argb(11,0,69,130),Color.TRANSPARENT},
+                null,Shader.TileMode.CLAMP));''',
 '''                 new int[]{a(CYAN,28),a(BLUE,14),Color.TRANSPARENT},
                  null,Shader.TileMode.CLAMP));''')
 rep("DashboardActivity.java",
-'''                 new int[]{a(BLUE,30),Color.rgb(1,9,19),Color.rgb(1,7,15)},null,Shader.TileMode.CLAMP));''',
+'''                new int[]{a(BLUE,30),Color.rgb(1,9,19),Color.rgb(1,7,15)},null,Shader.TileMode.CLAMP));''',
 '''                 new int[]{a(BLUE,36),BG,CivicTheme.blend(BG,Color.BLACK,.45f)},
                  null,Shader.TileMode.CLAMP));''')
 rep("DashboardActivity.java",
