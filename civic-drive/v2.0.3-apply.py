@@ -161,10 +161,15 @@ if content.count(old)!=1:
     raise RuntimeError("Home orb color anchor changed")
 content=content.replace(old,new,1)
 
-old='''            c.restore();
-            // Movimento real sem estrobo, desenhado a ~14 fps para preservar hardware antigo.'''
-new='''            c.restore();
-            // Warm plasma halo reacts to output audio without changing sprite geometry.
+# Scope the drawing change inside orb() and avoid assumptions about older comments.
+orb_start=content.index('        private void orb(Canvas c){')
+orb_end=content.index('        private void drawOrbSprite(Canvas c,Bitmap sprite,int opacity){',orb_start)
+orb_block=content[orb_start:orb_end]
+original_restore='            c.restore();'
+if orb_block.count(original_restore)<1:
+    raise RuntimeError("Home orb restore statement not found")
+halo='''            c.restore();
+            // Audio-brightness halo only, preserving the original RPM artwork.
             if(sound>.025f){
                 color(Color.WHITE);
                 p.setShader(new android.graphics.RadialGradient(cx,cy,194f,
@@ -173,11 +178,9 @@ new='''            c.restore();
                     null,android.graphics.Shader.TileMode.CLAMP));
                 c.drawCircle(cx,cy,194f,p);
                 p.setShader(null);
-            }
-            // Movimento real sem estrobo, desenhado a ~14 fps para preservar hardware antigo.'''
-if content.count(old)!=1:
-    raise RuntimeError("Home orb return anchor changed")
-content=content.replace(old,new,1)
+            }'''
+orb_block=orb_block.replace(original_restore,halo,1)
+content=content[:orb_start]+orb_block+content[orb_end:]
 
 # Dedicated UI toggle, opt-in permission and local-only audio; existing menu indices preserved.
 if content.count('    private void showThemes(){')!=1:
