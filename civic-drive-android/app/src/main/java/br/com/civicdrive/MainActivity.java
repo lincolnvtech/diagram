@@ -808,6 +808,9 @@ public final class MainActivity extends Activity implements LocationListener {
     private void openWaze(){
         CivicNavigation.openPreferred(this);
     }
+    private void openYouTube(){
+        openAppOrWebsite("com.google.android.youtube","https://www.youtube.com/");
+    }
     private void openAppOrWebsite(String packageName,String website){
         Intent launch=getPackageManager().getLaunchIntentForPackage(packageName);
         if(launch!=null){safeStart(launch);return;}
