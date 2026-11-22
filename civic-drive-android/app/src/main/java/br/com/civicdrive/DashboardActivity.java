@@ -295,6 +295,11 @@ public final class DashboardActivity extends Activity {
             label(c,"do Android: Spotify, YouTube Music.",146f,464f,20,MUTED,false,false);
             label(c,"Som do iPhone via CarPlay:",146f,534f,20,WHITE,false,false);
             label(c,"controle pelo CPLink.",146f,563f,20,MUTED,false,false);
+            label(c,"RPM: "+(d!=null&&d.rpm>=0f?Math.round(d.rpm)+" rpm":"—"),
+                146f,614f,21,CYAN,true,false);
+            label(c,"VELOCIDADE: "+(d!=null&&d.speed>=0f?
+                Math.round(d.speed)+" km/h":"—"),
+                146f,651f,21,CYAN,true,false);
 
             // Native Android control keys: send to the active player,
             // without falsely claiming the source accepted the command.
