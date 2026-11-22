@@ -110,12 +110,12 @@ final class CivicOrbRenderer {
         core=CivicTheme.orbAccent(core,theme);
         // Maintain 0..125 km/h secondary hue control independently of RPM.
         int speedHue=realSpeed?speedColor(smoothSpeed):CivicTheme.color(theme,1);
-        if(theme!=0)speedHue=CivicTheme.blend(speedHue,CivicTheme.color(theme,1),.62f);
+        if(theme!=0&&theme!=4)speedHue=CivicTheme.blend(speedHue,CivicTheme.color(theme,1),.62f);
         final boolean amber=realRpm&&band==4;
         final int edge=amber?CivicTheme.blend(core,speedHue,.22f):
             CivicTheme.blend(core,speedHue,realSpeed?.61f:.34f);
         final int purple=amber?CivicTheme.blend(core,speedHue,.14f):
-            CivicTheme.blend(speedHue,Color.rgb(210,99,248),theme==0?.54f:.16f);
+            CivicTheme.blend(speedHue,Color.rgb(210,99,248),(theme==0||theme==4)?.54f:.16f);
         final int white=amber?Color.rgb(255,241,212):Color.rgb(236,251,255);
 
         // Speed makes the magnetic lines travel faster, never shakes the orb.
