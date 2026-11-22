@@ -162,8 +162,9 @@ public final class DashboardActivity extends Activity {
             stft=online?p.getFloat("stft",-999f):-999f;
             float gps=p.getFloat("gps",-1f);
             int obdSpeed=p.getInt("obdSpeed",-1);
-            gpsValid=fresh&&gps>=0;
-            speed=gpsValid?gps:(online&&obdSpeed>=0?obdSpeed:-1f);
+            long gpsAt=p.getLong("gpsAt",0L);
+            gpsValid=gpsAt>0L&&System.currentTimeMillis()-gpsAt<9000L&&gps>=0;
+            speed=online&&obdSpeed>=0?obdSpeed:(gpsValid?gps:-1f);
             trip=p.getFloat("tripKm",-1f);
             avg=p.getFloat("kmL",-1f);
             rate=online?p.getFloat("fuelRate",-1f):-1f;
@@ -281,7 +282,8 @@ public final class DashboardActivity extends Activity {
             float strength=musicReactive.frame(DashboardActivity.this,
                 android.os.SystemClock.uptimeMillis());
             float rpm=d!=null?d.rpm:-1f;
-            musicOrb.draw(c,824f,437f,strength,musicReactive.treble(),rpm,rpm>=0f);
+            float vehicleSpeed=d!=null?d.speed:-1f;
+            musicOrb.draw(c,824f,437f,strength,rpm,vehicleSpeed,rpm>=0f);
 
             label(c,"CIVIC AUDIO",146f,262f,29,CYAN,true,false);
             label(c,"CENTRAL DE MÚSICA",146f,312f,34,WHITE,true,false);
