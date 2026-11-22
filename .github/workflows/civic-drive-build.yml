@@ -1,34 +1,10 @@
-# Civic Drive v2.0.4 — vivid automatic plasma and optional musical pulse; OBD unchanged.
+# Civic Drive v2.0.5: build directly from integrated Android sources, no patch chain.
 name: Civic G8 - APK assinado permanente
 on:
   push:
     branches: [civic-drive-build]
     paths:
-      - 'civic-drive/source-zip.base64'
-      - 'civic-drive/v1.6.patch'
-      - 'civic-drive/v1.8.patch'
-      - 'civic-drive/v1.9.patch'
-      - 'civic-drive/v1.9.1.patch'
-      - 'civic-drive/v1.9.2.patch'
-      - 'civic-drive/v1.9.3-apply.py'
-      - 'civic-drive/v1.9.3-art.base64'
-      - 'civic-drive/v1.9.4.patch'
-      - 'civic-drive/v1.9.4-art.base64'
-      - 'civic-drive/v1.9.5.patch'
-      - 'civic-drive/v1.9.6.patch'
-      - 'civic-drive/v1.9.7.patch'
-      - 'civic-drive/v1.9.8.patch'
-      - 'civic-drive/v1.9.9.patch'
-      - 'civic-drive/v1.9.10-apply.py'
-      - 'civic-drive/v1.9.11-apply.py'
-      - 'civic-drive/v1.9.12-apply.py'
-      - 'civic-drive/v2.0.0-apply.py'
-      - 'civic-drive/v2.0.1-apply.py'
-      - 'civic-drive/v2.0.2-apply.py'
-      - 'civic-drive/v2.0.3-apply.py'
-      - 'civic-drive/v2.0.4-apply.py'
-      - 'civic-drive/v1.9.5-art.base64'
-      - 'civic-drive/v1.9.1-art.base64'
+      - 'civic-drive-android/**'
       - 'civic-drive/signing.enc.json'
       - '.github/workflows/civic-drive-build.yml'
   workflow_dispatch:
@@ -65,49 +41,24 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Restaurar o projeto Android
+      - name: Validar projeto Android consolidado
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p build-civic
-          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
-          unzip -q /tmp/civic-g8-src.zip -d build-civic
-          test -f build-civic/app/build.gradle
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.6.patch)
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.8.patch)
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.patch)
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.1.patch)
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.2.patch)
-          base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/civic-v191-art.zip
-          unzip -oq /tmp/civic-v191-art.zip -d build-civic
-          for f in civic_v191_base civic_orb_cyan civic_orb_blue civic_orb_red; do test -s "build-civic/app/src/main/res/drawable-nodpi/${f}.webp"; done
-          python3 civic-drive/v1.9.3-apply.py build-civic
-          base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/civic-v193-art.zip
-          unzip -oq /tmp/civic-v193-art.zip -d build-civic
-          for f in civic_orb_neon civic_orb_purple civic_orb_amber; do test -s "build-civic/app/src/main/res/drawable-nodpi/${f}.webp"; done
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.4.patch)
-          base64 --decode civic-drive/v1.9.4-art.base64 > /tmp/civic-v194-art.zip
-          unzip -oq /tmp/civic-v194-art.zip -d build-civic
-          for f in civic_dash_engine civic_dash_rear civic_dash_honda; do test -s "build-civic/app/src/main/res/drawable-nodpi/${f}.webp"; done
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.5.patch)
-          base64 --decode civic-drive/v1.9.5-art.base64 > /tmp/civic-v195-art.zip
-          unzip -oq /tmp/civic-v195-art.zip -d build-civic
-          test -s build-civic/app/src/main/res/drawable-nodpi/civic_dash_front_tech.webp
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.6.patch)
-          (cd build-civic && patch --batch -p1 < ../civic-drive/v1.9.7.patch)
-          (cd build-civic && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.8.patch)
-          (cd build-civic && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.9.patch)
-          python3 civic-drive/v1.9.10-apply.py build-civic
-          python3 civic-drive/v1.9.11-apply.py build-civic
-          python3 civic-drive/v1.9.12-apply.py build-civic
-          python3 civic-drive/v2.0.0-apply.py build-civic
-          python3 civic-drive/v2.0.1-apply.py build-civic
-          python3 civic-drive/v2.0.2-apply.py build-civic
-          python3 civic-drive/v2.0.3-apply.py build-civic
-          python3 civic-drive/v2.0.4-apply.py build-civic
-          grep -q "versionCode 27" build-civic/app/build.gradle
-          grep -q "versionName '2.0.4'" build-civic/app/build.gradle
-          test -s build-civic/app/src/main/java/br/com/civicdrive/GearEstimator.java
+          ROOT=civic-drive-android
+          test -f "$ROOT/app/build.gradle"
+          test -f "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
+          test -f "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
+          grep -q 'versionCode 28' "$ROOT/app/build.gradle"
+          grep -q "versionName '2.0.5'" "$ROOT/app/build.gradle"
+          grep -q 'musicReactive.frame' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
+          grep -q 'private void orb(Canvas c)' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
+          grep -q 'AudioManager' "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
+          if grep -q 'toggleMusicReactive' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"; then
+            echo 'Falha: ainda existe opção manual de música.'
+            exit 1
+          fi
+          echo 'OK: projeto consolidado, áudio automático e versão verificada.'
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -143,13 +94,13 @@ jobs:
           if bundle.get('alias') != 'civic-g8-release':
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
-          unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v2.0.4.apk'
+          unsigned = root/'civic-drive-android/app/build/outputs/apk/release/app-release-unsigned.apk'
+          signed = root/'civic-drive/civic-drive-v2.0.5.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
               os.chmod(keystore, 0o600)
-              subprocess.run(['gradle', '--no-daemon', '--stacktrace', 'assembleRelease'], cwd=root/'build-civic',check=True)
+              subprocess.run(['gradle', '--no-daemon', '--stacktrace', 'assembleRelease'], cwd=root/'civic-drive-android',check=True)
               if not unsigned.is_file() or unsigned.stat().st_size < 1000:
                   raise SystemExit('ERRO: APK release nao foi compilado.')
               env = os.environ.copy()
@@ -166,26 +117,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v2.0.4 validado com assinatura permanente.')
+          print('APK v2.0.5 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v2.0.4.apk
+          APK=civic-drive/civic-drive-v2.0.5.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":27,"versionName":"2.0.4","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.4.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":28,"versionName":"2.0.5","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.5.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v2.0.4.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.0.5.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic G8 2.0.4 esfera animada e diagnostico musical'
+            git commit -m 'build: Civic G8 2.0.5 esfera musical automatica e fonte consolidada'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v2.0.4-release
-          path: civic-drive/civic-drive-v2.0.4.apk
+          name: civic-g8-v2.0.5-release
+          path: civic-drive/civic-drive-v2.0.5.apk
