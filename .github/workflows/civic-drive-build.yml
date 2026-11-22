@@ -1,4 +1,4 @@
-# Civic Drive v2.0.3 — optional audio-reactive orb colors; preserve OBD & themes.
+# Civic Drive v2.0.4 — vivid automatic plasma and optional musical pulse; OBD unchanged.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -26,6 +26,7 @@ on:
       - 'civic-drive/v2.0.1-apply.py'
       - 'civic-drive/v2.0.2-apply.py'
       - 'civic-drive/v2.0.3-apply.py'
+      - 'civic-drive/v2.0.4-apply.py'
       - 'civic-drive/v1.9.5-art.base64'
       - 'civic-drive/v1.9.1-art.base64'
       - 'civic-drive/signing.enc.json'
@@ -103,8 +104,9 @@ jobs:
           python3 civic-drive/v2.0.1-apply.py build-civic
           python3 civic-drive/v2.0.2-apply.py build-civic
           python3 civic-drive/v2.0.3-apply.py build-civic
-          grep -q "versionCode 26" build-civic/app/build.gradle
-          grep -q "versionName '2.0.3'" build-civic/app/build.gradle
+          python3 civic-drive/v2.0.4-apply.py build-civic
+          grep -q "versionCode 27" build-civic/app/build.gradle
+          grep -q "versionName '2.0.4'" build-civic/app/build.gradle
           test -s build-civic/app/src/main/java/br/com/civicdrive/GearEstimator.java
       - name: Instalar ferramentas do Android
         shell: bash
@@ -142,7 +144,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'build-civic/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v2.0.3.apk'
+          signed = root/'civic-drive/civic-drive-v2.0.4.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -164,26 +166,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v2.0.3 validado com assinatura permanente.')
+          print('APK v2.0.4 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v2.0.3.apk
+          APK=civic-drive/civic-drive-v2.0.4.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":26,"versionName":"2.0.3","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.3.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":27,"versionName":"2.0.4","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.4.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v2.0.3.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.0.4.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic G8 2.0.3 plasma musical com assinatura permanente'
+            git commit -m 'build: Civic G8 2.0.4 esfera animada e diagnostico musical'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v2.0.3-release
-          path: civic-drive/civic-drive-v2.0.3.apk
+          name: civic-g8-v2.0.4-release
+          path: civic-drive/civic-drive-v2.0.4.apk
