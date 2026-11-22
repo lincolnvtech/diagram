@@ -270,7 +270,7 @@ public final class MainActivity extends Activity implements LocationListener {
         private long downAt;
         private boolean animationRunning = true;
         private final float[] dockX = {174, 358, 542, 726, 910, 1094, 1278, 1462};
-        private final String[] dockNames = {"Início","Dash","Waze","Rádio","YouTube","Apps","Fundo","Nova"};
+        private final String[] dockNames = {"Início","Dash","Waze","Música","YouTube","Apps","Fundo","Nova"};
         Ui(){
             super(MainActivity.this);
             wallpaper=getSharedPreferences("civic_wallpaper",MODE_PRIVATE).getInt("mode",0);
@@ -553,10 +553,12 @@ public final class MainActivity extends Activity implements LocationListener {
                     c.drawRoundRect(new RectF(x-23,y-21,x+22,y+15),14,14,p);
                     c.drawLine(x-6,y+15,x-10,y+23,p);
                     c.drawCircle(x+10,y-4,2,p);break;
-                case 3: // Radio
-                    c.drawRoundRect(new RectF(x-25,y-15,x+24,y+23),5,5,p);
-                    c.drawLine(x-22,y-17,x+17,y-31,p);c.drawCircle(x+10,y+4,7,p);
-                    c.drawLine(x-18,y-6,x-2,y-6,p);break;
+                case 3: // Música
+                    c.drawCircle(x-12,y+17,8,p);
+                    c.drawCircle(x+18,y+9,8,p);
+                    c.drawLine(x-4,y+17,x-4,y-22,p);
+                    c.drawLine(x+26,y+9,x+26,y-27,p);
+                    c.drawLine(x-4,y-22,x+26,y-27,p);break;
                 case 4: // YouTube - ícone play; não confundir com o botão de adicionar
                     c.drawRoundRect(new RectF(x-27,y-19,x+27,y+19),8,8,p);
                     shape.moveTo(x-7,y-11);shape.lineTo(x+12,y);
@@ -634,7 +636,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 0:break;
                         case 1:openDashboards();break;
                         case 2:if(slotPackage(0).isEmpty())openWaze();else openShortcut(0);break;
-                        case 3:if(slotPackage(1).isEmpty())openRadio();else openShortcut(1);break;
+                        case 3:if(slotPackage(1).isEmpty())openMusic();else openShortcut(1);break;
                         case 4:if(slotPackage(2).isEmpty())openYouTube();else openShortcut(2);break;
                         case 5:showInstalledApps();break;
                         case 6:pickWallpaper();break;
@@ -669,6 +671,12 @@ public final class MainActivity extends Activity implements LocationListener {
         openApplicationCatalog(true,1);
     }
     private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
+    private void openMusicDashboard(){
+        dashboardOpen=true;
+        Intent music=new Intent(this,DashboardActivity.class);
+        music.putExtra("open_page",4);
+        safeStart(music);
+    }
     private void showGearDiagnostics(){
         long now=System.currentTimeMillis();
         boolean gpsFresh=lastGpsTime>0 && now-lastGpsTime<7000L && gpsKmh>=0;
@@ -729,7 +737,7 @@ public final class MainActivity extends Activity implements LocationListener {
     }
 
     private void showMenu() {
-        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube e som","Bluetooth","Atualizar pelo GitHub","Ajustes","Temas"};
+        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube e som","Bluetooth","Atualizar pelo GitHub","Ajustes","Temas","GPS / CarPlay","Diagnóstico GPS"};
         new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
                 .setItems(entries,(d,w)->{
                     switch(w){
@@ -747,6 +755,8 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 11:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
                         case 12:updates.checkForUpdates();break;
                         case 14:showThemes();break;
+                        case 15:CivicNavigation.showChooser(this);break;
+                        case 16:CivicNavigation.showGpsDiagnostics(this);break;
                         default:showSettings();
                     }
                 }).setNegativeButton("Fechar",null).show();
@@ -764,11 +774,13 @@ public final class MainActivity extends Activity implements LocationListener {
     }
     private void showSettings() {
         new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
-            .setItems(new String[]{"TEMAS · 4 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera"},
+            .setItems(new String[]{"TEMAS · 4 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera", "GPS / CarPlay", "Diagnóstico GPS"},
                 (d,which)->{
                     if(which==0){showThemes();return;}
                     if(which==1){showObdDiagnostics();return;}
                     if(which==13){showOrbDiagnostics();return;}
+                    if(which==14){CivicNavigation.showChooser(this);return;}
+                    if(which==15){CivicNavigation.showGpsDiagnostics(this);return;}
                     switch(which-2){
                         case 0:chooseObdDevice();break;
                         case 1:updates.checkForUpdates();break;
@@ -782,7 +794,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.5")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.6")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
@@ -794,19 +806,7 @@ public final class MainActivity extends Activity implements LocationListener {
         if(i!=null)safeStart(i);else Toast.makeText(this,"App não instalado: "+name,Toast.LENGTH_LONG).show();
     }
     private void openWaze(){
-        // Try Waze's own URI first. Some head units expose the app's deep-link
-        // handler but not a normal launcher activity.
-        try {
-            Intent deepLink=new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("waze://"));
-            deepLink.addCategory(Intent.CATEGORY_BROWSABLE);
-            startActivity(deepLink);
-            return;
-        } catch(Exception ignored) { }
-        // Fallback to the installed launcher, then the official universal URL.
-        openAppOrWebsite("com.waze","https://waze.com/ul");
-    }
-    private void openYouTube(){
-        openAppOrWebsite("com.google.android.youtube","https://www.youtube.com/");
+        CivicNavigation.openPreferred(this);
     }
     private void openAppOrWebsite(String packageName,String website){
         Intent launch=getPackageManager().getLaunchIntentForPackage(packageName);
@@ -924,37 +924,73 @@ public final class MainActivity extends Activity implements LocationListener {
         }
     }
     private void openMusic() {
-        Intent i=getPackageManager().getLaunchIntentForPackage("com.spotify.music");
-        if(i==null)i=getPackageManager().getLaunchIntentForPackage("com.google.android.apps.youtube.music");
-        if(i!=null)safeStart(i);else showYoutubeSettings();
+        openMusicDashboard();
     }
     private void safeStart(Intent intent) {
         try{startActivity(intent);}catch(ActivityNotFoundException|SecurityException e){Toast.makeText(this,"Não disponível nesta central",Toast.LENGTH_LONG).show();}
     }
     private boolean gpsAllowed() {
-        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                ==PackageManager.PERMISSION_GRANTED ||
+               checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                ==PackageManager.PERMISSION_GRANTED;
     }
-    private void requestGps() {
-        if(!gpsAllowed())requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},REQUEST_GPS);
-        else startGps();
+    private boolean fineGpsAllowed(){
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                ==PackageManager.PERMISSION_GRANTED;
+    }
+    private void requestGps(){
+        if(!gpsAllowed() || !fineGpsAllowed()){
+            requestPermissions(new String[]{
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION},REQUEST_GPS);
+        }else startGps();
     }
     @SuppressWarnings("MissingPermission") private void startGps(){
         if(!gpsAllowed()||gps==null)return;
-        try{
-            if(gps.isProviderEnabled(LocationManager.GPS_PROVIDER)){
+        boolean listening=false;
+        try {
+            if(fineGpsAllowed()&&gps.isProviderEnabled(LocationManager.GPS_PROVIDER)){
                 gps.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);
-                gpsStatus="GPS aguardando sinal";
-            }else gpsStatus="GPS desligado";
-        }catch(Exception e){gpsStatus="GPS indisponível";}
+                listening=true;
+            }
+        }catch(Exception ignored){ }
+        // Many Android head units have no fix/antenna: a network-based position
+        // is informative but must not be mislabeled as satellite GPS.
+        try {
+            if(gps.isProviderEnabled(LocationManager.NETWORK_PROVIDER)){
+                gps.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,2500,0,this);
+                listening=true;
+            }
+        }catch(Exception ignored){ }
+        gpsStatus=listening?"Localização aguardando sinal":"Localização indisponível";
+        if(surface!=null)surface.invalidate();
     }
     @Override public void onLocationChanged(Location location){
-        lastGpsTime=System.currentTimeMillis();gpsKmh=location.hasSpeed()?Math.max(0,location.getSpeed()*3.6f):-1;
-        gpsStatus=location.hasSpeed()?"GPS conectado":"GPS sem velocidade";
-        saveTelemetry();surface.invalidate();
+        if(location==null)return;
+        final long now=System.currentTimeMillis();
+        final boolean satellite=LocationManager.GPS_PROVIDER.equals(location.getProvider());
+        if(location.hasSpeed()){
+            gpsKmh=Math.max(0f,location.getSpeed()*3.6f);
+            lastGpsTime=now;
+        } else if(now-lastGpsTime>8500L) {
+            gpsKmh=-1f;
+        }
+        gpsStatus=(satellite?"GPS satélite":"Localização por rede")
+            +(location.hasAccuracy()?" · ~"+Math.round(location.getAccuracy())+" m":"")
+            +(location.hasSpeed()?"":" · sem velocidade");
+        saveTelemetry();if(surface!=null)surface.invalidate();
     }
-    @Override public void onProviderDisabled(String provider){ gpsKmh=-1;gpsStatus="GPS desligado";surface.invalidate(); }
-    @Override public void onProviderEnabled(String provider){ if(LocationManager.GPS_PROVIDER.equals(provider))startGps(); }
+    @Override public void onProviderDisabled(String provider){
+        if(LocationManager.GPS_PROVIDER.equals(provider)){
+            gpsStatus="GPS Android desativado";
+        }
+        if(surface!=null)surface.invalidate();
+    }
+    @Override public void onProviderEnabled(String provider){
+        if(LocationManager.GPS_PROVIDER.equals(provider) ||
+            LocationManager.NETWORK_PROVIDER.equals(provider))startGps();
+    }
     private boolean btAllowed(){return Build.VERSION.SDK_INT<31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;}
     @SuppressWarnings("MissingPermission") private void chooseObdDevice(){
         if(!btAllowed()) {requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);return;}
