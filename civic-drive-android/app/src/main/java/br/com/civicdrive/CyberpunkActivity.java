@@ -261,7 +261,7 @@ public final class CyberpunkActivity extends Activity {
             text(c,"CIVIC",153,48,46,WHITE,true,false);
             text(c,"DRIVE",316,48,46,CYAN,true,false);
             rect(c,476,19,570,60,19,0xff17304e);
-            text(c,"v2.0.9",523,47,22,WHITE,true,true);
+            text(c,"v2.0.10",523,47,22,WHITE,true,true);
             bars(c,629,40,CYAN,1f);
             text(c,"Spotify",713,47,31,GREEN,true,false);
             text(c,musicPlaying?"Reproduzindo":"Pausado / sem mídia",
@@ -439,7 +439,7 @@ public final class CyberpunkActivity extends Activity {
                 text(c,marks[i],left+w*.5f,835,35,i==0?CYAN:WHITE,true,true);
                 text(c,titles[i],left+w*.5f,863,25,i==0?CYAN:WHITE,i==0,true);
             }
-            text(c,"Civic Drive v2.0.9  |  Honda Civic G8",
+            text(c,"Civic Drive v2.0.10  |  Honda Civic G8",
                 824,910,20,MUTED,false,true);
         }
         @Override protected void onDraw(Canvas actual){
