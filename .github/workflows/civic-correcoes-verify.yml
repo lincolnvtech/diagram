@@ -20,7 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Tests Java puros: CAN, KWP, URL e relógio
+      - name: 'Tests Java puros - CAN, KWP, URL e relógio'
         run: |
           set -Eeuo pipefail
           mkdir -p /tmp/civic-javatest
