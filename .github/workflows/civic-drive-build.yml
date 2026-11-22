@@ -1,4 +1,4 @@
-# Civic Drive v2.0.6: unified music dashboard and native GPS/CPLink paths.
+# Civic Drive v2.0.7: OBD-friendly rendering and animated plasma inside the sphere.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -54,8 +54,8 @@ jobs:
           test -f "$ROOT/app/build.gradle"
           test -f "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           test -f "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
-          grep -q 'versionCode 29' "$ROOT/app/build.gradle"
-          grep -q "versionName '2.0.6'" "$ROOT/app/build.gradle"
+          grep -q 'versionCode 30' "$ROOT/app/build.gradle"
+          grep -q "versionName '2.0.7'" "$ROOT/app/build.gradle"
           grep -q 'musicReactive.frame' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           grep -q 'private void orb(Canvas c)' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           grep -q 'AudioManager' "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
@@ -71,7 +71,17 @@ jobs:
           grep -q 'CivicNavigation.openPreferred' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           grep -q 'CENTRAL DE MÚSICA' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
           grep -q 'getLastKnownLocation' "$ROOT/app/src/main/java/br/com/civicdrive/CivicNavigation.java"
-          echo 'OK: música, botões Android, plasma, GPS/CarPlay e projeto único.'
+          grep -q 'new CivicOrbRenderer' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
+          grep -q 'coreClip.addCircle' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
+          grep -q 'sharedSprites' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
+          grep -q 'dataLoadedAt' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
+          if grep -q 'new Visualizer(' "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"; then
+            echo 'ERRO: captura pesada de áudio reintroduzida.'; exit 1
+          fi
+          if grep -q 'android.permission.RECORD_AUDIO' "$ROOT/app/src/main/AndroidManifest.xml"; then
+            echo 'ERRO: permissão de microfone desnecessária.'; exit 1
+          fi
+          echo 'OK: plasma único animado, carga visual reduzida e OBD preservado.'
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -108,7 +118,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'civic-drive-android/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v2.0.6.apk'
+          signed = root/'civic-drive/civic-drive-v2.0.7.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -130,26 +140,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v2.0.6 validado com assinatura permanente.')
+          print('APK v2.0.7 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v2.0.6.apk
+          APK=civic-drive/civic-drive-v2.0.7.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":29,"versionName":"2.0.6","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.6.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":30,"versionName":"2.0.7","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.7.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v2.0.6.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.0.7.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic Drive 2.0.6 music dashboard and CPLink GPS bridge'
+            git commit -m 'build: Civic Drive 2.0.7 stable OBD and animated plasma'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v2.0.6-release
-          path: civic-drive/civic-drive-v2.0.6.apk
+          name: civic-g8-v2.0.7-release
+          path: civic-drive/civic-drive-v2.0.7.apk
