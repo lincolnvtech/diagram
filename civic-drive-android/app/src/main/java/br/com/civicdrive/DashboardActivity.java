@@ -17,6 +17,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
@@ -41,16 +42,82 @@ public final class DashboardActivity extends Activity {
     private static final int WARN=Color.rgb(246,178,69);
     private final Handler handler=new Handler(Looper.getMainLooper());
     private DashView surface;
+    private final MusicReactive musicReactive=new MusicReactive();
+    private CivicMediaControls player;
+    private boolean androidMusicActive=false;
     private int page=0;
-    private final Runnable update=new Runnable(){@Override public void run(){if(surface!=null)surface.invalidate();handler.postDelayed(this,1100L);}};
+    private final Runnable update=new Runnable(){
+        @Override public void run(){
+            if(page==4){
+                androidMusicActive=player!=null&&player.isMusicActive();
+                if(musicReactive.permitted(DashboardActivity.this))
+                    musicReactive.start(DashboardActivity.this);
+            }
+            if(surface!=null)surface.invalidate();
+            handler.postDelayed(this,page==4?850L:1100L);
+        }
+    };
 
     @Override public void onCreate(Bundle saved){super.onCreate(saved);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        player=new CivicMediaControls(this);
         surface=new DashView();setContentView(surface);
     }
-    @Override protected void onResume(){super.onResume();applyTheme();if(surface!=null)surface.invalidate();handler.post(update);}
-    @Override protected void onPause(){handler.removeCallbacks(update);super.onPause();}
+    @Override protected void onResume(){
+        super.onResume();applyTheme();
+        if(page==4 && musicReactive.permitted(this))musicReactive.start(this);
+        if(surface!=null)surface.invalidate();
+        handler.removeCallbacks(update);handler.post(update);
+    }
+    @Override protected void onPause(){
+        musicReactive.stop();handler.removeCallbacks(update);super.onPause();
+    }
+
+    private void selectPage(int selected){
+        page=Math.max(0,Math.min(4,selected));
+        if(page==4&&musicReactive.permitted(this))musicReactive.start(this);
+        else musicReactive.stop();
+        if(surface!=null)surface.invalidate();
+    }
+
+    private void playerCommand(int code){
+        boolean sent=player!=null&&player.send(code);
+        Toast.makeText(this,sent?"Comando enviado ao player Android":
+            "Player Android indisponível",Toast.LENGTH_SHORT).show();
+        if(surface!=null)surface.invalidate();
+    }
+
+    private void musicSources(){
+        new AlertDialog.Builder(this).setTitle("Civic Drive · Fonte da música")
+            .setItems(new String[]{"Spotify Android","YouTube Music Android",
+                "Rádio da central","iPhone pelo CPLink / CarPlay"},
+                (dialog,which)->{
+                    if(which==0)openNativePlayer("com.spotify.music");
+                    else if(which==1)openNativePlayer("com.google.android.apps.youtube.music");
+                    else if(which==2)openNativeRadio();
+                    else CivicNavigation.openCarPlay(this);
+                }).setNegativeButton("Voltar",null).show();
+    }
+    private void openNativePlayer(String packageName){
+        try{
+            Intent i=getPackageManager().getLaunchIntentForPackage(packageName);
+            if(i!=null)startActivity(i);
+            else Toast.makeText(this,"Player não instalado no Android da central",
+                    Toast.LENGTH_LONG).show();
+        }catch(Exception e){
+            Toast.makeText(this,"Não foi possível abrir o player",Toast.LENGTH_LONG).show();
+        }
+    }
+    private void openNativeRadio(){
+        for(String pkg:new String[]{"com.android.fmradio","com.microntek.radio",
+                "com.syu.radio","com.android.radio"}){
+            if(getPackageManager().getLaunchIntentForPackage(pkg)!=null){
+                openNativePlayer(pkg);return;
+            }
+        }
+        startActivity(new Intent(this,AppCatalogActivity.class));
+    }
 
     /** Applying a theme never changes the data sources of the instrument cluster. */
     private void applyTheme(){
@@ -111,7 +178,8 @@ public final class DashboardActivity extends Activity {
         private final Bitmap frontTech=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_front_tech);
         private final Bitmap car=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_rear);
         private final Bitmap honda=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_honda);
-        private final float[] tabs={203,611,1035,1440};
+        private final CivicOrbRenderer musicOrb=new CivicOrbRenderer(DashboardActivity.this);
+        private final float[] tabs={163f,490f,817f,1145f,1479f};
         private float downX,downY;private long downMs;
         private Data d;
         DashView(){super(DashboardActivity.this);setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
@@ -157,12 +225,13 @@ public final class DashboardActivity extends Activity {
             line(c,1590,28,1617,28,MUTED,3);line(c,1590,42,1617,42,MUTED,3);line(c,1590,56,1617,56,MUTED,3);
         }
         private void tabs(Canvas c){
-            final String[] names={"Velocímetro","Contagiros","Sensores","Autonomia"};
-            for(int i=0;i<4;i++){
+            final String[] names={"Velocímetro","Contagiros","Sensores","Autonomia","Música"};
+            for(int i=0;i<names.length;i++){
                 float x=tabs[i];
-                label(c,names[i],x,149,30,i==page?CYAN:WHITE,i==page,true);
-                if(i<3)line(c,(tabs[i]+tabs[i+1])/2f+40,113,(tabs[i]+tabs[i+1])/2f+40,157,a(OUTLINE,150),2);
-                if(i==page)line(c,x-125,170,x+125,170,CYAN,4);
+                label(c,names[i],x,149,27,i==page?CYAN:WHITE,i==page,true);
+                if(i<names.length-1)line(c,(tabs[i]+tabs[i+1])/2f,113,
+                        (tabs[i]+tabs[i+1])/2f,157,a(OUTLINE,150),2);
+                if(i==page)line(c,x-110,170,x+110,170,CYAN,4);
             }
             line(c,50,176,1598,176,a(BLUE,105),1);
         }
@@ -176,14 +245,77 @@ public final class DashboardActivity extends Activity {
             line(c,x+20,y+5,x+w*.37f,y+5,a(CYAN,155),2);
         }
         private void bottom(Canvas c){
-            final String[] dock={"Início","Dash","Waze","Rádio","Apps","Fundo","Nova"};
-            final String[] icons={"⌂","◴","◉","▣","▦","▧","∿"};
+            final String[] dock={"Início","Dash","Waze","Música","Apps","Fundo","Nova"};
+            final String[] icons={"⌂","◴","◉","♫","▦","▧","∿"};
             for(int i=0;i<7;i++){
                 float x=134+i*228;
                 label(c,icons[i],x,840,58,i==1?CYAN:WHITE,false,true);
                 label(c,dock[i],x,875,26,i==1?CYAN:MUTED,i==1,true);
             }
             line(c,270,901,455,901,CYAN,4);
+        }
+        private void musicControl(Canvas c,float cx,float cy,float radius,boolean primary){
+            set(primary?a(BLUE,145):a(BG,230));
+            c.drawCircle(cx,cy,radius,p);
+            set(a(CYAN,primary?211:128));
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(primary?3.8f:2f);
+            c.drawCircle(cx,cy,radius-2f,p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        private void musicPage(Canvas c){
+            backdropCard(c,54f,192f,1540f,556f);
+            int theme=CivicTheme.index(DashboardActivity.this);
+            float strength=musicReactive.frame(DashboardActivity.this,
+                android.os.SystemClock.uptimeMillis());
+            float rpm=d!=null?d.rpm:-1f;
+            musicOrb.draw(c,824f,437f,strength,musicReactive.treble(),rpm,rpm>=0f);
+
+            label(c,"CIVIC AUDIO",146f,262f,29,CYAN,true,false);
+            label(c,"CENTRAL DE MÚSICA",146f,312f,34,WHITE,true,false);
+            line(c,146f,334f,433f,334f,a(CYAN,160),2);
+            label(c,androidMusicActive?"ÁUDIO ANDROID EM REPRODUÇÃO":
+                    "AGUARDANDO PLAYER ANDROID",146f,392f,22,
+                    androidMusicActive?CYAN:MUTED,true,false);
+            label(c,"Controles compatíveis com players",146f,435f,20,MUTED,false,false);
+            label(c,"do Android: Spotify, YouTube Music.",146f,464f,20,MUTED,false,false);
+            label(c,"Som do iPhone via CarPlay:",146f,534f,20,WHITE,false,false);
+            label(c,"controle pelo CPLink.",146f,563f,20,MUTED,false,false);
+
+            // Native Android control keys: send to the active player,
+            // without falsely claiming the source accepted the command.
+            musicControl(c,638f,665f,52f,false);
+            musicControl(c,824f,665f,68f,true);
+            musicControl(c,1010f,665f,52f,false);
+            set(WHITE);p.setStrokeWidth(7f);p.setStrokeCap(Paint.Cap.ROUND);
+            c.drawLine(619,649,619,681,p);
+            android.graphics.Path previous=new android.graphics.Path();
+            previous.moveTo(654,648);previous.lineTo(627,665);
+            previous.lineTo(654,682);previous.close();c.drawPath(previous,p);
+            if(androidMusicActive){
+                c.drawRoundRect(new RectF(800,643,813,688),3,3,p);
+                c.drawRoundRect(new RectF(835,643,848,688),3,3,p);
+            }else{
+                android.graphics.Path play=new android.graphics.Path();
+                play.moveTo(805,640);play.lineTo(854,665);
+                play.lineTo(805,690);play.close();c.drawPath(play,p);
+            }
+            android.graphics.Path next=new android.graphics.Path();
+            next.moveTo(990,648);next.lineTo(1017,665);
+            next.lineTo(990,682);next.close();c.drawPath(next,p);
+            c.drawLine(1029,649,1029,681,p);
+            label(c,"ANTERIOR",638f,738f,19,MUTED,false,true);
+            label(c,androidMusicActive?"PAUSAR":"TOCAR",824f,753f,21,CYAN,true,true);
+            label(c,"PRÓXIMA",1010f,738f,19,MUTED,false,true);
+
+            // Side actions remain separate from the playback buttons.
+            backdropCard(c,1190,317,352,100);
+            label(c,"ABRIR REPRODUTOR",1366f,358f,25,WHITE,true,true);
+            label(c,"Spotify / Rádio / YouTube",1366f,394f,19,MUTED,false,true);
+            backdropCard(c,1190,440,352,94);
+            label(c,"iPHONE / CARPLAY",1366f,480f,24,CYAN,true,true);
+            label(c,"Abrir CPLink",1366f,511f,19,MUTED,false,true);
+            backdropCard(c,1190,557,352,85);
+            label(c,"GPS / WAZE",1366f,609f,24,WHITE,true,true);
         }
         /** Instrument with premium dark glass, crisp ticks, restrained cyan progress arc. */
         private void gauge(Canvas c,float cx,float cy,float radius,float min,float max,float value,
@@ -468,10 +600,8 @@ public final class DashboardActivity extends Activity {
             switch(which){
                 case 0:finish();break;
                 case 1:break;
-                case 2:launch("com.waze");break;
-                case 3:for(String pkg:new String[]{"com.android.fmradio","com.microntek.radio","com.syu.radio","com.android.radio"}){
-                    if(getPackageManager().getLaunchIntentForPackage(pkg)!=null){launch(pkg);return;}}
-                    startActivity(new Intent(DashboardActivity.this,AppCatalogActivity.class));break;
+                case 2:CivicNavigation.openPreferred(DashboardActivity.this);break;
+                case 3:selectPage(4);break;
                 case 4:startActivity(new Intent(DashboardActivity.this,AppCatalogActivity.class));break;
                 case 5:finish();break; // background selector remains in the main launcher
                 case 6:startActivity(new Intent(DashboardActivity.this,NovaActivity.class));break;
@@ -484,8 +614,11 @@ public final class DashboardActivity extends Activity {
             if(page==0)speedPage(real);
             else if(page==1)rpmPage(real);
             else if(page==2)sensorsPage(real);
-            else autonomyPage(real);
+            else if(page==3)autonomyPage(real);
+            else musicPage(real);
             bottom(real);real.restore();
+            if(page==4 && getWindowVisibility()==View.VISIBLE)
+                postInvalidateDelayed(75L); // animated orb, limited to ~14fps
         }
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX()*W/getWidth(),y=e.getY()*H/getHeight();
@@ -493,14 +626,31 @@ public final class DashboardActivity extends Activity {
             if(e.getAction()!=MotionEvent.ACTION_UP)return true;
             if(Math.abs(x-downX)>48||Math.abs(y-downY)>48)return true;
             performClick();
-            if(y>=103&&y<185){page=Math.min(3,Math.max(0,(int)(x/(W/4))));invalidate();return true;}
+            if(y>=103&&y<185){selectPage((int)(x/(W/5f)));return true;}
             if(y>780){dockClick(x);return true;}
             if(y<101&&x>1550){new AlertDialog.Builder(DashboardActivity.this).setTitle("Civic G8")
-                .setItems(new String[]{"Ler falhas","Histórico","Informar combustível","Temas","Voltar à home"},(dialog,idx)->{
+                .setItems(new String[]{"Ler falhas","Histórico","Informar combustível",
+                    "Temas","Música","GPS / CarPlay","Voltar à home"},(dialog,idx)->{
                     if(idx==0)startActivity(new Intent(DashboardActivity.this,FaultCodesActivity.class));
                     else if(idx==1)startActivity(new Intent(DashboardActivity.this,CarHistoryActivity.class));
-                    else if(idx==2)showFuelDialog();else if(idx==3)showThemePicker();else finish();
+                    else if(idx==2)showFuelDialog();
+                    else if(idx==3)showThemePicker();
+                    else if(idx==4)selectPage(4);
+                    else if(idx==5)CivicNavigation.showChooser(DashboardActivity.this);
+                    else finish();
                 }).show();return true;}
+            if(page==4){
+                if(y>=595&&y<=760){
+                    if(Math.abs(x-638)<87)playerCommand(KeyEvent.KEYCODE_MEDIA_PREVIOUS);
+                    else if(Math.abs(x-824)<95)playerCommand(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+                    else if(Math.abs(x-1010)<87)playerCommand(KeyEvent.KEYCODE_MEDIA_NEXT);
+                    else if(x>1180)CivicNavigation.showChooser(DashboardActivity.this);
+                    return true;
+                }
+                if(x>1180&&y>=310&&y<425){musicSources();return true;}
+                if(x>1180&&y>=432&&y<550){CivicNavigation.openCarPlay(DashboardActivity.this);return true;}
+                return true;
+            }
             if((page==0||page==1) && x>1160&&x<1410&&y>=184&&y<293){help("MARCHA");return true;}
             if(page==0){
                 if(x>530&&x<1140){help("VELOCIDADE");return true;}
