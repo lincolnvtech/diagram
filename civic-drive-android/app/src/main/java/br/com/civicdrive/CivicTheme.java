@@ -8,13 +8,14 @@ import android.graphics.ColorMatrixColorFilter;
 
 /** Persisted local appearance; never touches car sensors, telematics or connectivity. */
 final class CivicTheme {
-    static final String[] NAMES={"Neon Blue","Blackout","Arctic Cyan","Titanium"};
+    static final String[] NAMES={"Neon Blue","Blackout","Arctic Cyan","Titanium","Cyberpunk"};
     // BG, CYAN/accent, BLUE/secondary, WHITE, MUTED, OUTLINE.
     private static final int[][] COLORS={
         {0xff020911,0xff18d3f4,0xff1680cf,0xffeef5fc,0xff97b1c6,0xff1a597f},
         {0xff030507,0xffb7c7d7,0xff74889d,0xfff0f4f8,0xff9cabb9,0xff3e4b59},
         {0xff031a21,0xff44e4df,0xff149cbd,0xffefffff,0xff91c6c5,0xff237d86},
-        {0xff101821,0xff87b9fc,0xff4b7caf,0xfff1f6fa,0xffa6b8c6,0xff4a647f}
+        {0xff101821,0xff87b9fc,0xff4b7caf,0xfff1f6fa,0xffa6b8c6,0xff4a647f},
+        {0xff02060d,0xff20eaff,0xff974eff,0xfff3f8ff,0xff94a9c3,0xff285a9a}
     };
     // Cached filters: the launcher draws animated frames on low-memory head units.
     // Keep Android bitmap processing in native rendering, not CPU pixel loops.
@@ -33,7 +34,8 @@ final class CivicTheme {
         // Titanium: visibly muted brushed-steel blue, more silver than electric.
         new ColorMatrixColorFilter(new float[]{
             .78f,0,.28f,0,0,  0,.80f,.24f,0,0,  0,.14f,.60f,0,0,  0,0,0,1,0
-        })
+        }),
+        null // Cyberpunk uses real cyan / purple / magenta, no bitmap tint
     };
     static ColorFilter artFilter(int theme){
         return ART[Math.max(0,Math.min(ART.length-1,theme))];
@@ -46,7 +48,7 @@ final class CivicTheme {
             Math.round(Color.blue(first)*(1-t)+Color.blue(second)*t));
     }
     static int orbAccent(int current,int theme){
-        if(theme==0)return current;
+        if(theme==0||theme==4)return current;
         // Preserve the amber high-RPM reference; recolor the electric bands.
         if(Color.red(current)>145 && Color.red(current)>Color.blue(current)*1.4f)
             return current;
@@ -59,7 +61,7 @@ final class CivicTheme {
                 .getInt("theme",0);
         return Math.max(0,Math.min(NAMES.length-1,n));
     }
-    static int color(int theme,int slot){return COLORS[Math.max(0,Math.min(3,theme))][slot];}
+    static int color(int theme,int slot){return COLORS[Math.max(0,Math.min(COLORS.length-1,theme))][slot];}
     static void select(Context context,int theme){
         if(theme<0||theme>=NAMES.length)return;
         context.getSharedPreferences("civic_appearance",Context.MODE_PRIVATE)
