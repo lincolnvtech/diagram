@@ -58,7 +58,12 @@ public final class FaultCodesActivity extends Activity {
                 .setPositiveButton("Entendi",null).show();
             return;
         }
-        ObdManager.FaultCallback callback=text->onFaultResult(text);
+        ObdManager.FaultCallback callback=new ObdManager.FaultCallback(){
+            @Override public void completed(String text){
+                if(current!=this)return; // old scan callback must not overwrite a newer scan
+                onFaultResult(text);
+            }
+        };
         current=callback;
         if(obd.requestFaultRead(callback)){
             running=true;
