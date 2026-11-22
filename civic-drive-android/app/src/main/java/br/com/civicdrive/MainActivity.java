@@ -90,6 +90,9 @@ public final class MainActivity extends Activity implements LocationListener {
                 nextObdRetryMs=System.currentTimeMillis()+12000L;
             // Reconnect only with a paired ELM327 or a previously selected adapter.
             tryAutoObd();
+            // Auto-retry native sound capture after playback begins; no toggle.
+            if(foreground&&musicReactive.permitted(MainActivity.this))
+                musicReactive.start(MainActivity.this);
             if (surface != null) surface.invalidate();
             handler.postDelayed(this, 1000L);
         }
@@ -344,89 +347,106 @@ public final class MainActivity extends Activity implements LocationListener {
             return Math.max(0f,Math.min(1f,elapsed/460f));
         }
         private void orb(Canvas c){
-            // Movimento interno orgânico; a esfera fica centralizada, sem balançar ou girar.
-            // As cores seguem o RPM real e retornam ao ciano sem leitura OBD2.
-            final int rawBand=rpmOrbBand();
-            final int band=Math.max(0,rawBand);
-            final float rev=rawBand<0?0f:Math.max(0f,Math.min(1f,(float)(rpm/5500d)));
-            final long tick=android.os.SystemClock.uptimeMillis();
-            final float now=tick/1000f;
-            if(band!=activeOrbBand){previousOrbBand=activeOrbBand;activeOrbBand=band;orbChangeAt=tick;}
-            final float blend=orbBlend();
-            final int rpmTint=CivicTheme.orbAccent(
-                mix(ORB_TONES[previousOrbBand],ORB_TONES[activeOrbBand],blend),
-                CivicTheme.index(MainActivity.this));
-            final float sound=musicReactive.level();
-            final int palette=CivicTheme.index(MainActivity.this);
-            final int tint=MusicReactive.livelyColor(rpmTint,
-                CivicTheme.color(palette,1),CivicTheme.color(palette,2),
-                sound,musicReactive.high());
+            // Unified reactor: RPM determines the primary color, while local Android
+            // music energy changes the actual plasma size, gradients and orbit glow.
+            // No external audio data, ECU writes or heavy bitmap allocations.
+            final int requestedBand=rpmOrbBand();
+            final int band=Math.max(0,requestedBand);
+            final float rev=requestedBand<0?0f:
+                Math.max(0f,Math.min(1f,(float)(rpm/5500d)));
+            final long nowMs=android.os.SystemClock.uptimeMillis();
+            final float now=nowMs/1000f;
+            if(band!=activeOrbBand){
+                previousOrbBand=activeOrbBand;
+                activeOrbBand=band;
+                orbChangeAt=nowMs;
+            }
+            final float crossfade=orbBlend();
+            final int theme=CivicTheme.index(MainActivity.this);
+            final int rpmColor=CivicTheme.orbAccent(
+                mix(ORB_TONES[previousOrbBand],ORB_TONES[activeOrbBand],crossfade),theme);
+            final float musicEnergy=musicReactive.frame(MainActivity.this,nowMs);
+            final float high=musicReactive.treble();
+            final int brightColor=CivicTheme.color(theme,1);
+            final int deepColor=CivicTheme.color(theme,2);
+            final int tint=MusicReactive.livelyColor(
+                rpmColor,brightColor,deepColor,musicEnergy,high);
             final float cx=811f,cy=263f;
-            final float pulse=1f+(0.009f+rev*.007f)*(float)Math.sin(now*(1.8f+rev*1.4f));
-            c.save();c.scale(pulse,pulse,cx,cy);
-            drawOrbSprite(c,electricOrbs[previousOrbBand],Math.round(244f*(1f-blend)));
-            drawOrbSprite(c,electricOrbs[activeOrbBand],Math.round(244f*blend));
-            c.restore();
-            // 2.0.4: continuous electric-color life, even without external audio.
-            // Keep RPM's dominant tint; overlay color is intentionally visible
-            // but deliberately avoids strobe, rapid rotation and extra bitmap memory.
-            final float slowWave=.5f+.5f*(float)Math.sin(now*.90f);
-            final float otherWave=.5f+.5f*(float)Math.sin(now*.51f+1.3f);
-            final float musicGlow=Math.min(1f,Math.max(0f,sound));
-            final float bright=.40f+.60f*slowWave+musicGlow*.90f;
-            final int haloTone=CivicTheme.blend(tint,
-                CivicTheme.color(palette,1),.18f+.27f*otherWave);
+
+            // Even without access to the head unit's audio output, the core
+            // visibly breathes and its electric tone gently evolves.
+            final float breathe=.5f+.5f*(float)Math.sin(now*1.25f);
+            final float shimmer=.5f+.5f*(float)Math.sin(now*2.80f);
+            final float strength=Math.max(0f,Math.min(1f,musicEnergy));
+            final float pulse=1.010f + .018f*breathe + .055f*strength;
+            final int electric=CivicTheme.blend(tint,brightColor,.18f+.32f*shimmer);
+            final int shadow=CivicTheme.blend(tint,deepColor,.22f+.22f*(1f-shimmer));
+
+            // Foundation glow is drawn behind the original plasma artwork.
             color(Color.WHITE);
-            p.setShader(new android.graphics.RadialGradient(cx,cy,237f,
-                new int[]{alpha(haloTone,Math.min(132,(int)(46f+bright*56f))),
-                    alpha(CivicTheme.color(palette,2),
-                        Math.min(94,(int)(22f+bright*29f))),
-                    Color.TRANSPARENT},
-                new float[]{0f,.48f,1f},android.graphics.Shader.TileMode.CLAMP));
-            c.drawCircle(cx,cy,237f,p);
+            p.setShader(new android.graphics.RadialGradient(cx,cy,251f,
+                new int[]{
+                    alpha(electric,Math.min(230,90+(int)(110f*strength))),
+                    alpha(shadow,Math.min(135,38+(int)(66f*strength))),
+                    Color.TRANSPARENT
+                },new float[]{0f,.52f,1f},
+                android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx,cy,251f,p);
             p.setShader(null);
 
-            // Accentuate the existing orbital details with two independently
-            // breathing neon accents; no circular spin and no UI relayout.
+            // Unlike 2.0.3/2.0.4, the MUSIC ENERGY animates the actual ball,
+            // not just a faint ring placed on top of an unchanged sprite.
+            c.save();
+            c.scale(pulse,pulse,cx,cy);
+            drawOrbSprite(c,electricOrbs[previousOrbBand],
+                Math.round(246f*(1f-crossfade)));
+            drawOrbSprite(c,electricOrbs[activeOrbBand],
+                Math.round(246f*crossfade));
+            c.restore();
+
+            // Translucent moving color inside the ball: slow and comfortable.
+            final float lightX=cx+16f*(float)Math.sin(now*.77f);
+            final float lightY=cy+12f*(float)Math.cos(now*.63f);
+            color(Color.WHITE);
+            p.setShader(new android.graphics.RadialGradient(lightX,lightY,161f,
+                new int[]{
+                    alpha(electric,Math.min(190,65+(int)(94f*strength))),
+                    alpha(shadow,Math.min(115,20+(int)(51f*strength))),
+                    Color.TRANSPARENT
+                },new float[]{0f,.48f,1f},
+                android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx,cy,187f,p);
+            p.setShader(null);
+
+            // Surrounding rings express energy in brightness and width, without
+            // rotating or rocking the whole cockpit, and without flashing.
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeWidth(2.8f+bright*2.5f);
-            p.setColor(alpha(haloTone,Math.min(240,(int)(73f+bright*105f))));
-            c.drawArc(new RectF(cx-214f,cy-214f,cx+214f,cy+214f),
-                205f,68f,false,p);
-            p.setStrokeWidth(2.2f+bright*1.8f);
-            p.setColor(alpha(CivicTheme.color(palette,1),
-                Math.min(225,(int)(55f+(1f-slowWave)*95f+musicGlow*40f))));
-            c.drawArc(new RectF(cx-199f,cy-202f,cx+199f,cy+202f),
-                20f,61f,false,p);
+            p.setStrokeWidth(2.4f+4.0f*strength);
+            p.setColor(alpha(electric,Math.min(240,94+(int)(126f*strength))));
+            c.drawArc(new RectF(cx-217f,cy-220f,cx+217f,cy+220f),
+                206f+11f*(float)Math.sin(now*.54f),69f,false,p);
+
+            p.setStrokeWidth(1.9f+2.8f*strength);
+            p.setColor(alpha(shadow,Math.min(220,79+(int)(94f*strength))));
+            c.drawArc(new RectF(cx-198f,cy-201f,cx+198f,cy+201f),
+                18f-12f*(float)Math.sin(now*.46f+1.1f),61f,false,p);
+
+            p.setStrokeWidth(1.5f+3.0f*strength);
+            p.setColor(alpha(electric,Math.min(205,66+(int)(98f*strength))));
+            c.drawArc(new RectF(cx-169f,cy-172f,cx+169f,cy+172f),
+                119f+9f*(float)Math.sin(now*.73f),48f,false,p);
             p.setStyle(Paint.Style.FILL);
-            final int r=Color.red(tint),g=Color.green(tint),b=Color.blue(tint);
-            // Luz interna pulsa sem estrobo nem rotação da imagem inteira.
-            float lightPulse=.5f+.5f*(float)Math.sin(now*(1.55f+rev*1.2f));
-            color(Color.WHITE);
-            p.setShader(new android.graphics.RadialGradient(cx,cy,58+lightPulse*27f,
-                new int[]{Color.argb(48+(int)(20*lightPulse),r,g,b),
-                          Color.argb(17,r,g,b),Color.TRANSPARENT},null,
-                android.graphics.Shader.TileMode.CLAMP));
-            c.drawCircle(cx,cy,88+lightPulse*17f,p);p.setShader(null);
-            // Pequenos arcos em trajetórias opostas produzem uma energia viva,
-            // enquanto o centro permanece estável e confortável de acompanhar.
-            p.setStyle(Paint.Style.STROKE);p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeWidth(2.1f+rev*.6f);p.setColor(Color.argb(85,r,g,b));
-            RectF outer=new RectF(cx-218,cy-222,cx+218,cy+222);
-            c.drawArc(outer,(now*(14f+rev*25f))%360,50,false,p);
-            p.setColor(Color.argb(65,r,g,b));p.setStrokeWidth(1.8f);
-            RectF inner=new RectF(cx-196,cy-199,cx+196,cy+199);
-            c.drawArc(inner,(300-now*(11f+rev*22f))%360,64,false,p);
-            p.setStyle(Paint.Style.FILL);
-            for(int n=0;n<12;n++){
-                float angle=(float)(n*Math.PI*2/12)+now*((n%2==0?1:-1)*(.21f+rev*.27f));
-                float radius=181f+17f*(float)Math.sin(now*(.45f+rev*.55f)+n);
+
+            // Sparse sparks on the circumference (8 small dots), never a strobe.
+            for(int i=0;i<8;i++){
+                float angle=(float)(i*Math.PI/4.0)+now*(i%2==0?.09f:-.07f);
+                float radius=191f+8f*(float)Math.sin(now*.83f+i);
                 float x=cx+radius*(float)Math.cos(angle);
                 float y=cy+radius*(float)Math.sin(angle);
-                float sparkle=.5f+.5f*(float)Math.sin(now*(1.1f+rev*1.1f)+n*2);
-                p.setColor(Color.argb(53+(int)(72*sparkle),r,g,b));
-                c.drawCircle(x,y,1.6f+sparkle*1.4f,p);
+                p.setColor(alpha(i%2==0?electric:shadow,
+                    Math.min(230,75+(int)(88f*strength))));
+                c.drawCircle(x,y,2.1f+3.2f*strength,p);
             }
         }
         private void drawOrbSprite(Canvas c,Bitmap sprite,int opacity){
@@ -669,34 +689,17 @@ public final class MainActivity extends Activity implements LocationListener {
     }
     private final MusicReactive musicReactive=new MusicReactive();
     private static final int MUSIC_PERMISSION_REQUEST=4816;
+    private volatile boolean foreground = false;
     private void showOrbDiagnostics(){
         String status="Cores dinâmicas: SEMPRE LIGADAS\n"
             +"RPM: "+(rpm>=0?String.format(PT,"%.0f rpm",rpm):"sem leitura")+"\n"
             +"Áudio: "+musicReactive.diagnostics(this)+"\n\n"
-            +"Quando o Android bloquear a captura de outros apps, o reator "
-            +"continua pulsando com cores dinâmicas, mas sem seguir as batidas.";
+            +"Funcionamento automático. Se a central não compartilhar as "
+            +"batidas, a esfera mantém seu movimento elétrico suave.";
         new AlertDialog.Builder(this)
             .setTitle("Civic Drive · Diagnóstico da esfera")
             .setMessage(status)
             .setPositiveButton("Fechar",null).show();
-    }
-    private void toggleMusicReactive(){
-        boolean enable=!musicReactive.enabled(this);
-        musicReactive.setEnabled(this,enable);
-        if(!enable){
-            Toast.makeText(this,"Áudio OFF · animação dinâmica continua",Toast.LENGTH_LONG).show();
-        } else if(!musicReactive.permitted(this)){
-            Toast.makeText(this,"Permita o áudio para sincronizar a esfera",Toast.LENGTH_LONG).show();
-            if(android.os.Build.VERSION.SDK_INT>=23)
-                requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},
-                        MUSIC_PERMISSION_REQUEST);
-        } else if(musicReactive.start(this)){
-            Toast.makeText(this,"Áudio ON · confira Diagnóstico da esfera",Toast.LENGTH_LONG).show();
-        } else {
-            Toast.makeText(this,"Sem captura de áudio · cores dinâmicas continuam",
-                    Toast.LENGTH_LONG).show();
-        }
-        if(surface!=null)surface.invalidate();
     }
     private void showThemes(){
         new AlertDialog.Builder(this).setTitle("Civic Drive · 4 temas de cores")
@@ -761,12 +764,11 @@ public final class MainActivity extends Activity implements LocationListener {
     }
     private void showSettings() {
         new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
-            .setItems(new String[]{"TEMAS · 4 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Música reativa · "+(musicReactive.enabled(this)?"ON":"OFF"), "Diagnóstico da esfera"},
+            .setItems(new String[]{"TEMAS · 4 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera"},
                 (d,which)->{
                     if(which==0){showThemes();return;}
                     if(which==1){showObdDiagnostics();return;}
-                    if(which==13){toggleMusicReactive();return;}
-                    if(which==14){showOrbDiagnostics();return;}
+                    if(which==13){showOrbDiagnostics();return;}
                     switch(which-2){
                         case 0:chooseObdDevice();break;
                         case 1:updates.checkForUpdates();break;
@@ -780,7 +782,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.4")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.5")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
@@ -1029,25 +1031,49 @@ public final class MainActivity extends Activity implements LocationListener {
         }
     }
 
-    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){if(code==MUSIC_PERMISSION_REQUEST){
-            if(musicReactive.enabled(this)&&musicReactive.permitted(this))
-                musicReactive.start(this);
-            if(surface!=null)surface.invalidate();
-        }
-        
+    @Override public void onRequestPermissionsResult(
+            int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
+        if(code==MUSIC_PERMISSION_REQUEST){
+            if(musicReactive.permitted(this))musicReactive.start(this);
+            if(surface!=null)surface.invalidate();
+            return;
+        }
         if(code==REQUEST_GPS&&gpsAllowed())startGps();
         if(code==REQUEST_BLUETOOTH&&btAllowed())tryAutoObd();
     }
-    @Override protected void onResume(){super.onResume();dashboardOpen = false;
-        if(musicReactive.enabled(this) && musicReactive.permitted(this))
-            musicReactive.start(this);if(surface!=null){surface.resumeAnimation();}if(gpsAllowed())startGps();if(updates!=null){updates.onResume();updates.checkForUpdatesIfDue();}
-        if (Build.VERSION.SDK_INT >= 31 && !btAllowed()) {
+
+    @Override protected void onResume(){
+        super.onResume();
+        foreground=true;
+        dashboardOpen=false;
+        musicReactive.start(this);
+        if(surface!=null)surface.resumeAnimation();
+        if(gpsAllowed())startGps();
+        if(updates!=null){updates.onResume();updates.checkForUpdatesIfDue();}
+        if(Build.VERSION.SDK_INT>=31&&!btAllowed()){
             BluetoothManager manager=(BluetoothManager)getSystemService(Context.BLUETOOTH_SERVICE);
-            if (manager!=null && manager.getAdapter()!=null)
+            if(manager!=null&&manager.getAdapter()!=null)
                 requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);
-        } else tryAutoObd();
+        }else tryAutoObd();
+
+        // Android requires an explicit user grant for audio analysis. Request
+        // only once after the launcher is visible, never once per boot.
+        handler.postDelayed(()->{
+            if(!foreground||isShuttingDown||isFinishing())return;
+            if(musicReactive.permitted(this)){
+                musicReactive.start(this);
+                return;
+            }
+            if(Build.VERSION.SDK_INT<23)return;
+            SharedPreferences prefs=getSharedPreferences("civic_music_reactive",MODE_PRIVATE);
+            if(prefs.getBoolean("automatic_permission_asked",false))return;
+            prefs.edit().putBoolean("automatic_permission_asked",true).apply();
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},
+                MUSIC_PERMISSION_REQUEST);
+        },2200L);
     }
-    @Override protected void onPause(){musicReactive.stop();if(surface!=null)surface.pauseAnimation();if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
+
+    @Override protected void onPause(){foreground=false;musicReactive.stop();if(surface!=null)surface.pauseAnimation();if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
     @Override protected void onDestroy(){isShuttingDown=true;handler.removeCallbacks(ticker);if(gps!=null)gps.removeUpdates(this);if(obd!=null)obd.close();super.onDestroy();}
 }
