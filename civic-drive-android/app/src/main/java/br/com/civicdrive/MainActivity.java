@@ -90,9 +90,6 @@ public final class MainActivity extends Activity implements LocationListener {
                 nextObdRetryMs=System.currentTimeMillis()+12000L;
             // Reconnect only with a paired ELM327 or a previously selected adapter.
             tryAutoObd();
-            // Auto-retry native sound capture after playback begins; no toggle.
-            if(foreground&&musicReactive.permitted(MainActivity.this))
-                musicReactive.start(MainActivity.this);
             if (surface != null) surface.invalidate();
             handler.postDelayed(this, 1000L);
         }
@@ -255,13 +252,9 @@ public final class MainActivity extends Activity implements LocationListener {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Bitmap civic = BitmapFactory.decodeResource(getResources(), R.drawable.civic_cinema);
         private final Bitmap approvedBackdrop = BitmapFactory.decodeResource(getResources(), R.drawable.civic_v191_base);
-        private final Bitmap[] electricOrbs = {
-            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_cyan),
-            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_neon),
-            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_blue),
-            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_purple),
-            BitmapFactory.decodeResource(getResources(), R.drawable.civic_orb_amber)
-        };
+        // Shared with the music dashboard; images are decoded only once.
+        private final CivicOrbRenderer orbRenderer=
+            new CivicOrbRenderer(MainActivity.this);
         private final Drawable[] shortcuts = new Drawable[3];
         private final String[] shortcutsNames = new String[3];
         private int wallpaper = 0; // 0 = Nova (animated), 1 = Civic photo, 2 = quiet energy
@@ -347,119 +340,10 @@ public final class MainActivity extends Activity implements LocationListener {
             return Math.max(0f,Math.min(1f,elapsed/460f));
         }
         private void orb(Canvas c){
-            // Unified reactor: RPM determines the primary color, while local Android
-            // music energy changes the actual plasma size, gradients and orbit glow.
-            // No external audio data, ECU writes or heavy bitmap allocations.
-            final int requestedBand=rpmOrbBand();
-            final int band=Math.max(0,requestedBand);
-            final float rev=requestedBand<0?0f:
-                Math.max(0f,Math.min(1f,(float)(rpm/5500d)));
-            final long nowMs=android.os.SystemClock.uptimeMillis();
-            final float now=nowMs/1000f;
-            if(band!=activeOrbBand){
-                previousOrbBand=activeOrbBand;
-                activeOrbBand=band;
-                orbChangeAt=nowMs;
-            }
-            final float crossfade=orbBlend();
-            final int theme=CivicTheme.index(MainActivity.this);
-            final int rpmColor=CivicTheme.orbAccent(
-                mix(ORB_TONES[previousOrbBand],ORB_TONES[activeOrbBand],crossfade),theme);
-            final float musicEnergy=musicReactive.frame(MainActivity.this,nowMs);
-            final float high=musicReactive.treble();
-            final int brightColor=CivicTheme.color(theme,1);
-            final int deepColor=CivicTheme.color(theme,2);
-            final int tint=MusicReactive.livelyColor(
-                rpmColor,brightColor,deepColor,musicEnergy,high);
-            final float cx=811f,cy=263f;
-
-            // Even without access to the head unit's audio output, the core
-            // visibly breathes and its electric tone gently evolves.
-            final float breathe=.5f+.5f*(float)Math.sin(now*1.25f);
-            final float shimmer=.5f+.5f*(float)Math.sin(now*2.80f);
-            final float strength=Math.max(0f,Math.min(1f,musicEnergy));
-            final float pulse=1.010f + .018f*breathe + .055f*strength;
-            final int electric=CivicTheme.blend(tint,brightColor,.18f+.32f*shimmer);
-            final int shadow=CivicTheme.blend(tint,deepColor,.22f+.22f*(1f-shimmer));
-
-            // Foundation glow is drawn behind the original plasma artwork.
-            color(Color.WHITE);
-            p.setShader(new android.graphics.RadialGradient(cx,cy,251f,
-                new int[]{
-                    alpha(electric,Math.min(230,90+(int)(110f*strength))),
-                    alpha(shadow,Math.min(135,38+(int)(66f*strength))),
-                    Color.TRANSPARENT
-                },new float[]{0f,.52f,1f},
-                android.graphics.Shader.TileMode.CLAMP));
-            c.drawCircle(cx,cy,251f,p);
-            p.setShader(null);
-
-            // Unlike 2.0.3/2.0.4, the MUSIC ENERGY animates the actual ball,
-            // not just a faint ring placed on top of an unchanged sprite.
-            c.save();
-            c.scale(pulse,pulse,cx,cy);
-            drawOrbSprite(c,electricOrbs[previousOrbBand],
-                Math.round(246f*(1f-crossfade)));
-            drawOrbSprite(c,electricOrbs[activeOrbBand],
-                Math.round(246f*crossfade));
-            c.restore();
-
-            // Translucent moving color inside the ball: slow and comfortable.
-            final float lightX=cx+16f*(float)Math.sin(now*.77f);
-            final float lightY=cy+12f*(float)Math.cos(now*.63f);
-            color(Color.WHITE);
-            p.setShader(new android.graphics.RadialGradient(lightX,lightY,161f,
-                new int[]{
-                    alpha(electric,Math.min(190,65+(int)(94f*strength))),
-                    alpha(shadow,Math.min(115,20+(int)(51f*strength))),
-                    Color.TRANSPARENT
-                },new float[]{0f,.48f,1f},
-                android.graphics.Shader.TileMode.CLAMP));
-            c.drawCircle(cx,cy,187f,p);
-            p.setShader(null);
-
-            // Surrounding rings express energy in brightness and width, without
-            // rotating or rocking the whole cockpit, and without flashing.
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeWidth(2.4f+4.0f*strength);
-            p.setColor(alpha(electric,Math.min(240,94+(int)(126f*strength))));
-            c.drawArc(new RectF(cx-217f,cy-220f,cx+217f,cy+220f),
-                206f+11f*(float)Math.sin(now*.54f),69f,false,p);
-
-            p.setStrokeWidth(1.9f+2.8f*strength);
-            p.setColor(alpha(shadow,Math.min(220,79+(int)(94f*strength))));
-            c.drawArc(new RectF(cx-198f,cy-201f,cx+198f,cy+201f),
-                18f-12f*(float)Math.sin(now*.46f+1.1f),61f,false,p);
-
-            p.setStrokeWidth(1.5f+3.0f*strength);
-            p.setColor(alpha(electric,Math.min(205,66+(int)(98f*strength))));
-            c.drawArc(new RectF(cx-169f,cy-172f,cx+169f,cy+172f),
-                119f+9f*(float)Math.sin(now*.73f),48f,false,p);
-            p.setStyle(Paint.Style.FILL);
-
-            // Sparse sparks on the circumference (8 small dots), never a strobe.
-            for(int i=0;i<8;i++){
-                float angle=(float)(i*Math.PI/4.0)+now*(i%2==0?.09f:-.07f);
-                float radius=191f+8f*(float)Math.sin(now*.83f+i);
-                float x=cx+radius*(float)Math.cos(angle);
-                float y=cy+radius*(float)Math.sin(angle);
-                p.setColor(alpha(i%2==0?electric:shadow,
-                    Math.min(230,75+(int)(88f*strength))));
-                c.drawCircle(x,y,2.1f+3.2f*strength,p);
-            }
-        }
-        private void drawOrbSprite(Canvas c,Bitmap sprite,int opacity){
-            if(sprite==null || opacity<=0)return;
-            color(Color.WHITE);
-            p.setAlpha(Math.max(0,Math.min(255,opacity)));
-            p.setColorFilter(CivicTheme.artFilter(CivicTheme.index(MainActivity.this)));
-            // Exibe apenas o plasma; corta a legenda NOVA gravada na imagem original.
-            final int height=(int)(sprite.getHeight()*.80f);
-            c.drawBitmap(sprite,new android.graphics.Rect(0,0,sprite.getWidth(),height),
-                    new RectF(493f,14f,1127f,427f),p);
-            p.setColorFilter(null);
-            p.setAlpha(255);
+            float level=musicReactive.frame(MainActivity.this,
+                android.os.SystemClock.uptimeMillis());
+            orbRenderer.draw(c,811f,263f,level,musicReactive.treble(),
+                (float)rpm,obdConnected);
         }
         private void civicWallpaper(Canvas c){
             if(civic != null){
@@ -615,7 +499,7 @@ public final class MainActivity extends Activity implements LocationListener {
             c.restore();
             // Deliberately limit CPU usage on older Android head units.
             if(animationRunning && wallpaper==0 && getWindowVisibility()==View.VISIBLE)
-                postInvalidateDelayed(75); // cerca de 16 fps, sem sobrecarregar a central
+                postInvalidateDelayed(110); // ~9 fps: preserva CPU para Bluetooth e ELM327
         }
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX()*CW/getWidth(),y=e.getY()*CH/getHeight();
@@ -696,7 +580,6 @@ public final class MainActivity extends Activity implements LocationListener {
             .setMessage(message).setPositiveButton("Entendi",null).show();
     }
     private final MusicReactive musicReactive=new MusicReactive();
-    private static final int MUSIC_PERMISSION_REQUEST=4816;
     private volatile boolean foreground = false;
     private void showOrbDiagnostics(){
         String status="Cores dinâmicas: SEMPRE LIGADAS\n"
@@ -794,7 +677,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.6")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.7")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
@@ -1073,15 +956,9 @@ public final class MainActivity extends Activity implements LocationListener {
     @Override public void onRequestPermissionsResult(
             int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
-        if(code==MUSIC_PERMISSION_REQUEST){
-            if(musicReactive.permitted(this))musicReactive.start(this);
-            if(surface!=null)surface.invalidate();
-            return;
-        }
         if(code==REQUEST_GPS&&gpsAllowed())startGps();
         if(code==REQUEST_BLUETOOTH&&btAllowed())tryAutoObd();
     }
-
     @Override protected void onResume(){
         super.onResume();
         foreground=true;
@@ -1096,21 +973,7 @@ public final class MainActivity extends Activity implements LocationListener {
                 requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);
         }else tryAutoObd();
 
-        // Android requires an explicit user grant for audio analysis. Request
-        // only once after the launcher is visible, never once per boot.
-        handler.postDelayed(()->{
-            if(!foreground||isShuttingDown||isFinishing())return;
-            if(musicReactive.permitted(this)){
-                musicReactive.start(this);
-                return;
-            }
-            if(Build.VERSION.SDK_INT<23)return;
-            SharedPreferences prefs=getSharedPreferences("civic_music_reactive",MODE_PRIVATE);
-            if(prefs.getBoolean("automatic_permission_asked",false))return;
-            prefs.edit().putBoolean("automatic_permission_asked",true).apply();
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},
-                MUSIC_PERMISSION_REQUEST);
-        },2200L);
+        // No audio permission or system-wide Visualizer is used.
     }
 
     @Override protected void onPause(){foreground=false;musicReactive.stop();if(surface!=null)surface.pauseAnimation();if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
