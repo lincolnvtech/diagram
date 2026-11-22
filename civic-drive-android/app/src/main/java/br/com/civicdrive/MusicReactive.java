@@ -96,6 +96,7 @@ final class MusicReactive {
     synchronized void stop(){
         Visualizer old=visualizer;
         visualizer=null;
+        if(old!=null)lastAttemptAt=0L;
         if(old!=null){
             try{old.setEnabled(false);}catch(Exception ignored){}
             try{old.release();}catch(Exception ignored){}
