@@ -198,7 +198,8 @@ public final class MainActivity extends Activity implements LocationListener {
         getSharedPreferences("civic_telemetry",MODE_PRIVATE).edit()
                 .putBoolean("connected", obdConnected).putFloat("rpm", (float)rpm)
                 .putInt("temp",coolant).putFloat("volts",volts)
-                .putFloat("gps",gpsKmh).putInt("obdSpeed",obdSpeed)
+                .putFloat("gps",gpsKmh).putLong("gpsAt",lastGpsTime)
+                .putInt("obdSpeed",obdSpeed)
                 .putFloat("fuelRate",(float)fuelLitresPerHour).putFloat("kmL",(float)avgKmL)
                 .putFloat("tripKm",(float)tripDistanceKm).putFloat("tripL",(float)tripFuelLitres)
                 .putFloat("mapKpa",(float)mapKpa).putFloat("engineLoad",(float)engineLoadPct)
@@ -310,40 +311,22 @@ public final class MainActivity extends Activity implements LocationListener {
                 (obdConnected && obdSpeed >= 0 ? obdSpeed : -1f);
             return live < 0 ? -1 : Math.round(live);
         }
-        private int mix(int a,int b,float f){
-            int r=(int)(Color.red(a)+(Color.red(b)-Color.red(a))*f);
-            int g=(int)(Color.green(a)+(Color.green(b)-Color.green(a))*f);
-            int bl=(int)(Color.blue(a)+(Color.blue(b)-Color.blue(a))*f);
-            return Color.rgb(r,g,bl);
+        private int alpha(int color,int a){
+            return Color.argb(a,Color.red(color),Color.green(color),Color.blue(color));
         }
-        private int alpha(int c,int a){ return Color.argb(a,Color.red(c),Color.green(c),Color.blue(c)); }
-        private int rpmOrbBand(){
-            // Offline: low-energy cyan only, never infer RPM from GPS speed.
-            if(!obdConnected || rpm<0 || Double.isNaN(rpm)) return -1;
-            if(rpm<900d) return 0;
-            if(rpm<2000d) return 1;
-            if(rpm<3500d) return 2;
-            if(rpm<5000d) return 3;
-            return 4;
-        }
-        private static final int[] ORB_TONES={
-            Color.rgb(55,195,222), // idle: cyan suave
-            Color.rgb(18,155,239), // azul neon
-            Color.rgb(50,94,251),  // azul eletrico
-            Color.rgb(175,103,241),// roxo eletrico
-            Color.rgb(248,165,58)  // alto giro: ambar, sem vermelho
-        };
-        private int activeOrbBand=0, previousOrbBand=0;
-        private long orbChangeAt=0L;
-        private float orbBlend(){
-            long elapsed=android.os.SystemClock.uptimeMillis()-orbChangeAt;
-            return Math.max(0f,Math.min(1f,elapsed/460f));
+        private float orbVehicleSpeed(){
+            // Real OBD2 speed first; recent GPS only when an OBD2 reading
+            // is missing. Never infer km/h from RPM or music.
+            if(obdConnected && obdSpeed>=0)return obdSpeed;
+            if(gpsKmh>=0 && System.currentTimeMillis()-lastGpsTime<9000L)
+                return gpsKmh;
+            return -1f;
         }
         private void orb(Canvas c){
             float level=musicReactive.frame(MainActivity.this,
                 android.os.SystemClock.uptimeMillis());
-            orbRenderer.draw(c,811f,263f,level,musicReactive.treble(),
-                (float)rpm,obdConnected);
+            orbRenderer.draw(c,811f,263f,level,(float)rpm,
+                orbVehicleSpeed(),obdConnected);
         }
         private void civicWallpaper(Canvas c){
             if(civic != null){
@@ -677,7 +660,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.7")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.8")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
