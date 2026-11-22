@@ -1,4 +1,4 @@
-# Civic Drive v2.0.7: OBD-friendly rendering and animated plasma inside the sphere.
+# Civic Drive v2.0.8: original procedural plasma with RPM + vehicle speed color logic.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -54,8 +54,8 @@ jobs:
           test -f "$ROOT/app/build.gradle"
           test -f "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           test -f "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
-          grep -q 'versionCode 30' "$ROOT/app/build.gradle"
-          grep -q "versionName '2.0.7'" "$ROOT/app/build.gradle"
+          grep -q 'versionCode 31' "$ROOT/app/build.gradle"
+          grep -q "versionName '2.0.8'" "$ROOT/app/build.gradle"
           grep -q 'musicReactive.frame' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           grep -q 'private void orb(Canvas c)' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
           grep -q 'AudioManager' "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"
@@ -72,8 +72,8 @@ jobs:
           grep -q 'CENTRAL DE MÚSICA' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
           grep -q 'getLastKnownLocation' "$ROOT/app/src/main/java/br/com/civicdrive/CivicNavigation.java"
           grep -q 'new CivicOrbRenderer' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
-          grep -q 'coreClip.addCircle' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
-          grep -q 'sharedSprites' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
+          grep -q 'for(int i=0;i<12;i++)' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
+          grep -q 'speedColor(float speed)' "$ROOT/app/src/main/java/br/com/civicdrive/CivicOrbRenderer.java"
           grep -q 'dataLoadedAt' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
           if grep -q 'new Visualizer(' "$ROOT/app/src/main/java/br/com/civicdrive/MusicReactive.java"; then
             echo 'ERRO: captura pesada de áudio reintroduzida.'; exit 1
@@ -81,7 +81,10 @@ jobs:
           if grep -q 'android.permission.RECORD_AUDIO' "$ROOT/app/src/main/AndroidManifest.xml"; then
             echo 'ERRO: permissão de microfone desnecessária.'; exit 1
           fi
-          echo 'OK: plasma único animado, carga visual reduzida e OBD preservado.'
+          grep -q 'orbVehicleSpeed' "$ROOT/app/src/main/java/br/com/civicdrive/MainActivity.java"
+          grep -q 'gpsAt' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
+          grep -q 'musicOrb.draw' "$ROOT/app/src/main/java/br/com/civicdrive/DashboardActivity.java"
+          echo 'OK: plasma procedural com filamentos, RPM, velocidade real e OBD preservado.'
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -118,7 +121,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'civic-drive-android/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v2.0.7.apk'
+          signed = root/'civic-drive/civic-drive-v2.0.8.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -140,26 +143,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v2.0.7 validado com assinatura permanente.')
+          print('APK v2.0.8 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v2.0.7.apk
+          APK=civic-drive/civic-drive-v2.0.8.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":30,"versionName":"2.0.7","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.7.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":31,"versionName":"2.0.8","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.0.8.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v2.0.7.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.0.8.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic Drive 2.0.7 stable OBD and animated plasma'
+            git commit -m 'build: Civic Drive 2.0.8 procedural plasma RPM and velocity'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v2.0.7-release
-          path: civic-drive/civic-drive-v2.0.7.apk
+          name: civic-g8-v2.0.8-release
+          path: civic-drive/civic-drive-v2.0.8.apk
