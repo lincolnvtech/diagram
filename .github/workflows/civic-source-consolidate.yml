@@ -1,0 +1,73 @@
+name: Civic Drive - Consolidar projeto Android original
+on:
+  push:
+    branches: [civic-drive-build]
+    paths: ['.github/workflows/civic-source-consolidate.yml']
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: civic-drive-build
+      - name: Reconstruir fontes uma única vez
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p civic-drive-android
+          base64 --decode civic-drive/source-zip.base64 > /tmp/civic-g8-src.zip
+          unzip -q /tmp/civic-g8-src.zip -d civic-drive-android
+          test -f civic-drive-android/app/build.gradle
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.6.patch)
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.8.patch)
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.patch)
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.1.patch)
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.2.patch)
+          base64 --decode civic-drive/v1.9.1-art.base64 > /tmp/civic-v191-art.zip
+          unzip -oq /tmp/civic-v191-art.zip -d civic-drive-android
+          for f in civic_v191_base civic_orb_cyan civic_orb_blue civic_orb_red; do test -s "civic-drive-android/app/src/main/res/drawable-nodpi/${f}.webp"; done
+          python3 civic-drive/v1.9.3-apply.py civic-drive-android
+          base64 --decode civic-drive/v1.9.3-art.base64 > /tmp/civic-v193-art.zip
+          unzip -oq /tmp/civic-v193-art.zip -d civic-drive-android
+          for f in civic_orb_neon civic_orb_purple civic_orb_amber; do test -s "civic-drive-android/app/src/main/res/drawable-nodpi/${f}.webp"; done
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.4.patch)
+          base64 --decode civic-drive/v1.9.4-art.base64 > /tmp/civic-v194-art.zip
+          unzip -oq /tmp/civic-v194-art.zip -d civic-drive-android
+          for f in civic_dash_engine civic_dash_rear civic_dash_honda; do test -s "civic-drive-android/app/src/main/res/drawable-nodpi/${f}.webp"; done
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.5.patch)
+          base64 --decode civic-drive/v1.9.5-art.base64 > /tmp/civic-v195-art.zip
+          unzip -oq /tmp/civic-v195-art.zip -d civic-drive-android
+          test -s civic-drive-android/app/src/main/res/drawable-nodpi/civic_dash_front_tech.webp
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.6.patch)
+          (cd civic-drive-android && patch --batch -p1 < ../civic-drive/v1.9.7.patch)
+          (cd civic-drive-android && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.8.patch)
+          (cd civic-drive-android && patch --batch --fuzz=0 -p1 < ../civic-drive/v1.9.9.patch)
+          python3 civic-drive/v1.9.10-apply.py civic-drive-android
+          python3 civic-drive/v1.9.11-apply.py civic-drive-android
+          python3 civic-drive/v1.9.12-apply.py civic-drive-android
+          python3 civic-drive/v2.0.0-apply.py civic-drive-android
+          python3 civic-drive/v2.0.1-apply.py civic-drive-android
+          python3 civic-drive/v2.0.2-apply.py civic-drive-android
+          python3 civic-drive/v2.0.3-apply.py civic-drive-android
+          python3 civic-drive/v2.0.4-apply.py civic-drive-android
+          grep -q "versionCode 27" civic-drive-android/app/build.gradle
+          grep -q "versionName '2.0.4'" civic-drive-android/app/build.gradle
+          test -s civic-drive-android/app/src/main/java/br/com/civicdrive/GearEstimator.java
+      - name: Publicar projeto-fonte completo como arquivos versionados
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f civic-drive-android/app/src/main/java/br/com/civicdrive/MainActivity.java
+          test -f civic-drive-android/app/src/main/java/br/com/civicdrive/MusicReactive.java
+          grep -q "versionCode 27" civic-drive-android/app/build.gradle
+          find civic-drive-android -type d \( -name .gradle -o -name build \) -prune -exec rm -rf {} +
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f civic-drive-android/
+          if ! git diff --cached --quiet; then
+            git commit -m 'refactor(civic): consolidate Android source into directly editable project'
+            git push origin HEAD:civic-drive-build
+          fi
+          echo "Civic Drive native source consolidated: no future patch chain required."
