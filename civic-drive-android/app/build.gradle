@@ -10,8 +10,8 @@ android {
         applicationId 'br.com.civicdrive'
         minSdk 24
         targetSdk 35
-        versionCode 31
-        versionName '2.0.8'
+        versionCode 32
+        versionName '2.0.9'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
