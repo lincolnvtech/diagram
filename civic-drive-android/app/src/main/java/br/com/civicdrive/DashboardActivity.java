@@ -59,6 +59,7 @@ public final class DashboardActivity extends Activity {
     };
 
     @Override public void onCreate(Bundle saved){super.onCreate(saved);
+        page=Math.min(4,Math.max(0,getIntent().getIntExtra("open_page",0)));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         player=new CivicMediaControls(this);
@@ -640,6 +641,9 @@ public final class DashboardActivity extends Activity {
                     else finish();
                 }).show();return true;}
             if(page==4){
+                if(x>1180f&&y>=555f&&y<=646f){
+                    CivicNavigation.showChooser(DashboardActivity.this);return true;
+                }
                 if(y>=595&&y<=760){
                     if(Math.abs(x-638)<87)playerCommand(KeyEvent.KEYCODE_MEDIA_PREVIOUS);
                     else if(Math.abs(x-824)<95)playerCommand(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
