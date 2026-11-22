@@ -78,6 +78,16 @@ public final class MainActivity extends Activity implements LocationListener {
     private float estimatedGearSpeed=-1f;
     private long lastFuelMs = 0L;
     private long lastHistorySample = 0L;
+    // Throttle flash-backed SharedPreferences, preserving the latest ECU state.
+    private static final long TELEMETRY_MIN_GAP_MS=1000L;
+    private long lastTelemetryWrite=0L;
+    private boolean telemetryFlushPending=false;
+    private final Runnable telemetryFlush=new Runnable(){
+        @Override public void run(){
+            telemetryFlushPending=false;
+            writeTelemetry();
+        }
+    };
     private static final String HOME_PREFS = "civic_shortcuts";
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
@@ -205,6 +215,20 @@ public final class MainActivity extends Activity implements LocationListener {
         saveTelemetry();surface.invalidate();
     }
     private void saveTelemetry() {
+        long elapsed=lastTelemetryWrite==0L?TELEMETRY_MIN_GAP_MS:
+            android.os.SystemClock.elapsedRealtime()-lastTelemetryWrite;
+        long remaining=TELEMETRY_MIN_GAP_MS-elapsed;
+        if(remaining<=0L){
+            handler.removeCallbacks(telemetryFlush);
+            telemetryFlushPending=false;
+            writeTelemetry();
+        }else if(!telemetryFlushPending){
+            telemetryFlushPending=true;
+            handler.postDelayed(telemetryFlush,remaining);
+        }
+    }
+    private void writeTelemetry(){
+        lastTelemetryWrite=android.os.SystemClock.elapsedRealtime();
         getSharedPreferences("civic_telemetry",MODE_PRIVATE).edit()
                 .putBoolean("connected", obdConnected).putFloat("rpm", (float)rpm)
                 .putInt("temp",coolant).putFloat("volts",volts)
@@ -224,7 +248,8 @@ public final class MainActivity extends Activity implements LocationListener {
     /** Coleta local, sem GPS exato, VIN nem dados pessoais; nenhum envio automático. */
     private void saveHistorySample() {
         long now = System.currentTimeMillis();
-        if (!obdConnected || now - lastHistorySample < 60000L) return;
+        // Ten-minute snapshots: 1008 points cover seven days without oversized exports.
+        if (!obdConnected || now - lastHistorySample < 600000L) return;
         lastHistorySample = now;
         TelemetryArchive.record(this, now, (float)rpm, coolant, volts,
                 gpsKmh, (float)avgKmL, (float)mapKpa, (float)engineLoadPct,
@@ -681,7 +706,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.9")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.10")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
@@ -889,7 +914,9 @@ public final class MainActivity extends Activity implements LocationListener {
         if(adapter==null){Toast.makeText(this,"Sem Bluetooth nesta central",Toast.LENGTH_LONG).show();return;}
         try{
             if(!adapter.isEnabled()) {safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));return;}
-            Set<BluetoothDevice> paired=adapter.getBondedDevices();List<BluetoothDevice> list=new ArrayList<>(paired);
+            Set<BluetoothDevice> paired=adapter.getBondedDevices();
+            List<BluetoothDevice> list=new ArrayList<>(
+                paired==null?Collections.<BluetoothDevice>emptySet():paired);
             Collections.sort(list,Comparator.comparing(d->d.getName()==null?"":d.getName()));
             if(list.isEmpty()){safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));Toast.makeText(this,"Pareie o ELM327 antes",Toast.LENGTH_LONG).show();return;}
             String[] labels=new String[list.size()];for(int i=0;i<list.size();i++)labels[i]=(list.get(i).getName()==null?"Dispositivo":list.get(i).getName())+" · "+list.get(i).getAddress();
@@ -972,14 +999,36 @@ public final class MainActivity extends Activity implements LocationListener {
         if(gpsAllowed())startGps();
         if(updates!=null){updates.onResume();updates.checkForUpdatesIfDue();}
         if(Build.VERSION.SDK_INT>=31&&!btAllowed()){
+            SharedPreferences settings=getSharedPreferences(OBD_PREFS,MODE_PRIVATE);
             BluetoothManager manager=(BluetoothManager)getSystemService(Context.BLUETOOTH_SERVICE);
-            if(manager!=null&&manager.getAdapter()!=null)
-                requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);
+            if(manager!=null&&manager.getAdapter()!=null &&
+                !settings.getBoolean("bt_permission_asked",false)){
+                settings.edit().putBoolean("bt_permission_asked",true).apply();
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},
+                    REQUEST_BLUETOOTH);
+            }
         }else tryAutoObd();
 
         // No audio permission or system-wide Visualizer is used.
     }
 
-    @Override protected void onPause(){foreground=false;musicReactive.stop();if(surface!=null)surface.pauseAnimation();if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);if(updates!=null)updates.onPause();super.onPause();}
-    @Override protected void onDestroy(){isShuttingDown=true;handler.removeCallbacks(ticker);if(gps!=null)gps.removeUpdates(this);if(obd!=null)obd.close();super.onDestroy();}
+    @Override protected void onPause(){
+        foreground=false;
+        musicReactive.stop();
+        if(surface!=null)surface.pauseAnimation();
+        handler.removeCallbacks(telemetryFlush);
+        telemetryFlushPending=false;
+        writeTelemetry();
+        if(gps!=null&&!dashboardOpen)gps.removeUpdates(this);
+        if(updates!=null)updates.onPause();
+        super.onPause();
+    }
+    @Override protected void onDestroy(){
+        isShuttingDown=true;
+        handler.removeCallbacks(ticker);
+        handler.removeCallbacks(telemetryFlush);
+        if(gps!=null)gps.removeUpdates(this);
+        if(obd!=null)obd.close();
+        super.onDestroy();
+    }
 }

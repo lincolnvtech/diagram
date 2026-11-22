@@ -55,9 +55,12 @@ public final class ObdManager {
     private static volatile ObdManager shared;
     public static ObdManager shared() {return shared;}
     public boolean isConnected(){return linkReady && isActive();}
-    public boolean requestFaultRead(FaultCallback callback){
+    public synchronized boolean requestFaultRead(FaultCallback callback){
         if(callback==null || !isConnected() || pendingFaultRead!=null)return false;
         pendingFaultRead=callback;return true;
+    }
+    public synchronized void cancelFaultRead(FaultCallback callback){
+        if(callback!=null && pendingFaultRead==callback)pendingFaultRead=null;
     }
     public boolean isActive() { Thread t=worker;return !stopped && t!=null && t.isAlive(); }
 
@@ -197,9 +200,16 @@ public final class ObdManager {
                 }
                 FaultCallback callback=pendingFaultRead;
                 if(callback!=null){
-                    pendingFaultRead=null;
                     String result=readFaultCodes(out,in);
-                    new Handler(Looper.getMainLooper()).post(()->callback.completed(result));
+                    boolean stillPending;
+                    synchronized(this){
+                        stillPending=pendingFaultRead==callback;
+                        if(stillPending)pendingFaultRead=null;
+                    }
+                    if(stillPending){
+                        new Handler(Looper.getMainLooper()).post(
+                            ()->callback.completed(result));
+                    }
                 }
                 // Moderate request rate keeps low-cost adapters responsive.
                 Thread.sleep(ecuResponded?850L:1200L);
@@ -228,12 +238,19 @@ public final class ObdManager {
     /** Somente leitura: 03 armazenados, 07 pendentes, 0A permanentes. NUNCA envia o modo 04. */
     private String readFaultCodes(OutputStream out, InputStream in){
         StringBuilder result=new StringBuilder("Leitura OBD2 · ECU do Civic\n");
+        boolean can=false;
+        try{
+            can=DtcDecoder.isCanProtocol(command(out,in,"ATDPN",1500L));
+        }catch(Exception ignored){
+            // Fail closed to legacy non-CAN interpretation when protocol is unknown.
+        }
         String[] modes={"03","07","0A"};
         String[] titles={"Armazenados (03)","Pendentes (07)","Permanentes (0A)"};
         for(int k=0;k<modes.length;k++){
             try {
                 String raw=command(out,in,modes[k],4200);
-                LinkedHashSet<String> codes=decodeTroubleCodes(raw,k==0?"43":k==1?"47":"4A");
+                LinkedHashSet<String> codes=DtcDecoder.decode(raw,
+                    k==0?"43":k==1?"47":"4A",can);
                 result.append(titles[k]).append(": ");
                 if(codes.isEmpty())result.append(raw.toUpperCase(Locale.ROOT).contains("NO DATA") ?
                         "sem resposta/não suportado" : raw.toUpperCase(Locale.ROOT).contains(k==0?"43":k==1?"47":"4A")?
@@ -245,25 +262,9 @@ public final class ObdManager {
         result.append("\nConsulta somente leitura. Não apaga códigos nem substitui diagnóstico mecânico.");
         return result.toString();
     }
-    static LinkedHashSet<String> decodeTroubleCodes(String raw,String marker) {
-        LinkedHashSet<String> result=new LinkedHashSet<>();
-        if(raw==null)return result;
-        for(String line:raw.toUpperCase(Locale.ROOT).split("[\r\n]+")){
-            if(line.contains("NO DATA")||line.contains("ERROR"))continue;
-            String hex=line.replaceAll("[^0-9A-F]", "");
-            int at=hex.indexOf(marker);
-            if(at<0)continue;
-            int offset=at+marker.length();
-            for(int p=offset;p+4<=hex.length() && result.size()<24;p+=4){
-                try{
-                    int a=Integer.parseInt(hex.substring(p,p+2),16),b=Integer.parseInt(hex.substring(p+2,p+4),16);
-                    if(a==0&&b==0)continue;
-                    String code=""+"PCBU".charAt((a>>6)&3)+((a>>4)&3)+String.format(Locale.ROOT,"%X%02X",a&15,b);
-                    result.add(code);
-                }catch(Exception ignored){break;}
-            }
-        }
-        return result;
+    /** Compatibility for legacy callers (non-CAN default). */
+    static LinkedHashSet<String> decodeTroubleCodes(String raw,String marker){
+        return DtcDecoder.decode(raw,marker,false);
     }
 
     /** Timeout de leitura opcional: falha pontual não significa Bluetooth desconectado. */
@@ -349,6 +350,7 @@ public final class ObdManager {
         stopped = true;
         linkReady=false;
         connectStartedAt=0L;
+        final FaultCallback pending=pendingFaultRead;
         pendingFaultRead=null;
         ++generation;
         safeClose(socket);
@@ -356,6 +358,10 @@ public final class ObdManager {
         Thread old = worker;
         if (old != null) old.interrupt();
         worker = null;
+        if(pending!=null){
+            new Handler(Looper.getMainLooper()).post(
+                ()->pending.completed("Leitura interrompida: a conexão com o ELM327 foi encerrada."));
+        }
     }
     private static void safeClose(BluetoothSocket s) {
         if (s != null) try { s.close(); } catch (IOException ignore) { }

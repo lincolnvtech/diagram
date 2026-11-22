@@ -16,6 +16,7 @@ import android.provider.Settings;
 import android.widget.Toast;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -63,6 +64,9 @@ public final class UpdateManager {
         resumed = false;
         ui.removeCallbacks(watcher);
     }
+    private boolean alive(){
+        return !activity.isFinishing() && !activity.isDestroyed();
+    }
 
     /** Silent startup check: success is cached for 12h; network errors retry after 10m. */
     void checkForUpdatesIfDue() {
@@ -70,8 +74,7 @@ public final class UpdateManager {
         long now=System.currentTimeMillis();
         long lastSuccess=prefs.getLong("auto_last_success",0L);
         long lastAttempt=prefs.getLong("auto_last_attempt",0L);
-        if (now-lastSuccess < 12L*60L*60L*1000L ||
-                now-lastAttempt < 10L*60L*1000L) return;
+        if(!UpdatePolicy.isAutoCheckDue(now,lastSuccess,lastAttempt))return;
         prefs.edit().putLong("auto_last_attempt",now).apply();
         checkForUpdates(true);
     }
@@ -81,7 +84,9 @@ public final class UpdateManager {
     private void checkForUpdates(boolean silent) {
         if (checking) return;
         checking = true;
-        Toast.makeText(activity, "Procurando atualização no GitHub…", Toast.LENGTH_SHORT).show();
+        if(!silent && alive())
+            Toast.makeText(activity,"Procurando atualização no GitHub…",
+                Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             try {
                 // Query unique on each check to avoid an older latest.json cached by
@@ -112,34 +117,43 @@ public final class UpdateManager {
                 String versionName = json.getString("versionName");
                 String url = json.getString("apkUrl");
                 String sha256 = json.getString("sha256").toLowerCase(Locale.ROOT);
-                if (remoteCode < 1 || !url.startsWith(ROOT) || !url.endsWith(".apk") ||
+                if (remoteCode < 1 || !UpdatePolicy.isTrustedApkUrl(url,ROOT) ||
                         !sha256.matches("[0-9a-f]{64}")) {
                     throw new Exception("Manifesto inválido ou endereço não autorizado");
                 }
                 prefs.edit().putLong("auto_last_success",System.currentTimeMillis()).apply();
                 long localCode = installedVersionCode();
                 if (remoteCode <= localCode) {
-                    if (!silent) ui.post(() -> new AlertDialog.Builder(activity)
+                    if (!silent) ui.post(() -> {
+                        if(!alive())return;
+                        new AlertDialog.Builder(activity)
                             .setTitle("Civic Drive atualizado")
                             .setMessage("Instalado: código " + localCode + "\n"
                                   + "GitHub: " + versionName + " (código " + remoteCode + ").\n\n"
                                   + "Consulta realizada sem cache.")
-                            .setPositiveButton("OK", null).show());
+                            .setPositiveButton("OK", null).show();
+                    });
                 } else {
-                    ui.post(() -> new AlertDialog.Builder(activity)
+                    ui.post(() -> {
+                        if(!alive())return;
+                        new AlertDialog.Builder(activity)
                             .setTitle("Atualização " + versionName)
                             .setMessage("Nova versão disponível no GitHub. Baixar e abrir o instalador Android? " +
                                     "A instalação precisa da sua confirmação.")
                             .setNegativeButton("Agora não", null)
-                            .setPositiveButton("BAIXAR", (d, w) -> beginDownload(url, sha256)).show());
+                            .setPositiveButton("BAIXAR", (d, w) -> beginDownload(url, sha256)).show();
+                    });
                 }
             } catch (Exception e) {
                 String message = e.getMessage() == null ? "Erro desconhecido" : e.getMessage();
-                if (!silent) ui.post(() -> new AlertDialog.Builder(activity)
+                if (!silent) ui.post(() -> {
+                    if(!alive())return;
+                    new AlertDialog.Builder(activity)
                         .setTitle("Não foi possível atualizar")
                         .setMessage("Não foi possível consultar o GitHub nesta central. "
                                     + "Verifique a conexão e tente novamente.\n\nDiagnóstico: " + message)
-                        .setPositiveButton("OK", null).show());
+                        .setPositiveButton("OK", null).show();
+                });
             } finally {
                 ui.post(() -> checking = false);
             }
@@ -159,6 +173,12 @@ public final class UpdateManager {
         try {
             long previousId = prefs.getLong("download_id", -1);
             if (previousId > 0) downloads.remove(previousId);
+            // DownloadManager does not overwrite a downloaded APK that remains
+            // after the previous successful update.
+            File dir=activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            File stale=dir==null?null:new File(dir,"civic-drive-update.apk");
+            if(stale!=null && stale.isFile() && !stale.delete())
+                throw new Exception("Não foi possível substituir o APK antigo");
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             request.setTitle("Atualização Civic Drive");
             request.setDescription("Baixando APK oficial do repositório do Civic Drive");
@@ -178,15 +198,20 @@ public final class UpdateManager {
         long id = prefs.getLong("download_id", -1);
         if (id < 0 || downloads == null || verifying) return;
         try (android.database.Cursor cursor = downloads.query(new DownloadManager.Query().setFilterById(id))) {
-            if (cursor == null || !cursor.moveToFirst()) return;
+            if(cursor==null)return;
+            if(!cursor.moveToFirst()){
+                prefs.edit().remove("download_id").remove("sha256").apply();
+                return;
+            }
             int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                 Uri uri = downloads.getUriForDownloadedFile(id);
                 String hash = prefs.getString("sha256", "");
                 verifying = true;
                 new Thread(() -> {
-                    boolean ok = false;
-                    try (InputStream in = activity.getContentResolver().openInputStream(uri)) {
+                    boolean ok=false;
+                    String error=null;
+                    try (InputStream in=activity.getContentResolver().openInputStream(uri)) {
                         if (in == null) throw new Exception("Arquivo não encontrado");
                         MessageDigest digest = MessageDigest.getInstance("SHA-256");
                         byte[] buffer = new byte[32768];
@@ -195,29 +220,38 @@ public final class UpdateManager {
                         StringBuilder sb = new StringBuilder();
                         for (byte b : digest.digest()) sb.append(String.format(Locale.ROOT, "%02x", b & 0xff));
                         ok = sb.toString().equals(hash);
-                    } catch (Exception ignored) { }
-                    final boolean verified = ok;
-                    ui.post(() -> {
-                        verifying = false;
+                    }catch(Exception ex){
+                        error=ex.getMessage()==null?"Falha de leitura":ex.getMessage();
+                    }
+                    final boolean verified=ok;
+                    final String detail=error;
+                    ui.post(()->{
+                        verifying=false;
                         prefs.edit().remove("download_id").remove("sha256").apply();
-                        if (!verified) {
-                            downloads.remove(id);
+                        if(!verified){
+                            try{downloads.remove(id);}catch(Exception ignored){}
+                        }
+                        if(!alive())return;
+                        if(!verified){
                             new AlertDialog.Builder(activity).setTitle("Download rejeitado")
-                                    .setMessage("O arquivo não passou na verificação de integridade SHA-256.")
-                                    .setPositiveButton("OK", null).show();
-                        } else {
+                                .setMessage(detail!=null?
+                                    "Não foi possível verificar o APK: "+detail:
+                                    "O arquivo não passou na verificação SHA-256.")
+                                .setPositiveButton("OK",null).show();
+                        }else{
                             new AlertDialog.Builder(activity)
-                                    .setTitle("APK pronto para instalar")
-                                    .setMessage("Confirme a instalação na próxima tela do Android. Se o Android impedir, autorize a instalação para o Civic Drive nas configurações.")
-                                    .setNegativeButton("Depois", null)
-                                    .setPositiveButton("INSTALAR", (dialog, which) -> openInstaller(uri))
-                                    .show();
+                                .setTitle("APK pronto para instalar")
+                                .setMessage("Confirme a instalação na próxima tela do Android. Se o Android impedir, autorize a instalação para o Civic Drive nas configurações.")
+                                .setNegativeButton("Depois",null)
+                                .setPositiveButton("INSTALAR",(dialog,which)->openInstaller(uri))
+                                .show();
                         }
                     });
                 }, "civic-update-sha256").start();
             } else if (status == DownloadManager.STATUS_FAILED) {
                 prefs.edit().remove("download_id").remove("sha256").apply();
-                Toast.makeText(activity, "Download falhou. Verifique a conexão e tente novamente.", Toast.LENGTH_LONG).show();
+                if(alive())Toast.makeText(activity,"Download falhou. Verifique a conexão e tente novamente.",
+                    Toast.LENGTH_LONG).show();
             }
         } catch (Exception ignored) { }
     }
@@ -230,7 +264,12 @@ public final class UpdateManager {
                         .setPositiveButton("ABRIR CONFIGURAÇÕES", (d, w) -> {
                             Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                                     Uri.parse("package:" + activity.getPackageName()));
-                            activity.startActivity(i);
+                            try{activity.startActivity(i);}
+                            catch(Exception ex){
+                                if(alive())Toast.makeText(activity,
+                                    "Configurações indisponíveis: autorize a instalação manualmente.",
+                                    Toast.LENGTH_LONG).show();
+                            }
                         }).setNegativeButton("Cancelar", null).show();
                 return;
             }

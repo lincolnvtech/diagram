@@ -20,11 +20,11 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Histórico offline privado, amostragem por minuto, sem coordenadas, VIN ou upload automático. */
+/** Histórico offline privado, uma amostra a cada dez minutos, sem coordenadas ou VIN. */
 final class TelemetryArchive {
     private static final String FILE="civic_history.jsonl";
     private static final ExecutorService disk=Executors.newSingleThreadExecutor();
-    private static final int MAX_SAMPLES=1008; // amostra/minuto, até uma semana de leituras (com carro ligado).
+    private static final int MAX_SAMPLES=1008; // 7 dias × 24 horas × 6 amostras/hora
     private TelemetryArchive() { }
     static void record(Context context,long timestamp,float rpm,int coolant,float voltage,float speed,float kmL,
                        float map,float load,float iat,float trim) {
@@ -60,7 +60,7 @@ final class TelemetryArchive {
         if(!tmp.renameTo(source)){source.delete();tmp.renameTo(source);}
     }
     static String localSummary(Context c) {
-        List<JSONObject> history=read(c,500);
+        List<JSONObject> history=read(c,MAX_SAMPLES);
         if(history.isEmpty())return "Histórico local: ainda sem amostras OBD2. Ligue o carro com o ELM327 conectado.";
         int count=0;double totalTemp=0,peakTemp=-999,peakRpm=-1,sumKmL=0;int consumed=0;
         long first=0,last=0;
@@ -95,7 +95,7 @@ final class TelemetryArchive {
     static String exportJson(Context ctx){
         JSONArray array=new JSONArray();for(JSONObject row:read(ctx,MAX_SAMPLES))array.put(row);
         JSONObject result=new JSONObject();try{result.put("source","civic_drive");result.put("vehicle","Civic G8 2011");
-            result.put("sample_period_seconds",60);result.put("samples",array);result.put("faults",ctx.getSharedPreferences("civic_faults",Context.MODE_PRIVATE).getString("summary",""));}
+            result.put("sample_period_seconds",600);result.put("samples",array);result.put("faults",ctx.getSharedPreferences("civic_faults",Context.MODE_PRIVATE).getString("summary",""));}
         catch(Exception ignored){}
         return result.toString();
     }
