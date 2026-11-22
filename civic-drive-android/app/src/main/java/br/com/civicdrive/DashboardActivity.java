@@ -77,9 +77,11 @@ public final class DashboardActivity extends Activity {
 
     private void selectPage(int selected){
         page=Math.max(0,Math.min(4,selected));
-        if(page==4&&musicReactive.permitted(this))musicReactive.start(this);
-        else musicReactive.stop();
-        if(surface!=null)surface.invalidate();
+        if(surface!=null){
+            surface.setLayerType(page==4?View.LAYER_TYPE_NONE:
+                View.LAYER_TYPE_SOFTWARE,null);
+            surface.invalidate();
+        }
     }
 
     private void playerCommand(int code){
@@ -175,15 +177,25 @@ public final class DashboardActivity extends Activity {
 
     private final class DashView extends View {
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
-        private final Bitmap engine=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_engine);
-        private final Bitmap frontTech=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_front_tech);
-        private final Bitmap car=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_rear);
+        // Large gauge art is only needed on the car instrument pages,
+        // not on the frequently refreshed music display.
+        private Bitmap engine, frontTech;
         private final Bitmap honda=BitmapFactory.decodeResource(getResources(),R.drawable.civic_dash_honda);
         private final CivicOrbRenderer musicOrb=new CivicOrbRenderer(DashboardActivity.this);
         private final float[] tabs={163f,490f,817f,1145f,1479f};
         private float downX,downY;private long downMs;
         private Data d;
-        DashView(){super(DashboardActivity.this);setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
+        private long dataLoadedAt;
+        DashView(){
+            super(DashboardActivity.this);
+            setLayerType(page==4?View.LAYER_TYPE_NONE:View.LAYER_TYPE_SOFTWARE,null);
+        }
+        private void ensureGaugeArt(){
+            if(engine==null)engine=BitmapFactory.decodeResource(
+                getResources(),R.drawable.civic_dash_engine);
+            if(frontTech==null)frontTech=BitmapFactory.decodeResource(
+                getResources(),R.drawable.civic_dash_front_tech);
+        }
         private int a(int rgb,int alpha){return Color.argb(alpha,Color.red(rgb),Color.green(rgb),Color.blue(rgb));}
         private void set(int color){p.reset();p.setAntiAlias(true);p.setFilterBitmap(true);p.setColor(color);}
         private void fill(Canvas c,float x,float y,float w,float h,float radius,int col){set(col);c.drawRoundRect(new RectF(x,y,x+w,y+h),radius,radius,p);}
@@ -610,7 +622,12 @@ public final class DashboardActivity extends Activity {
         }
         @Override protected void onDraw(Canvas real){
             super.onDraw(real);
-            d=new Data();real.save();real.scale(getWidth()/W,getHeight()/H);
+            long uptime=android.os.SystemClock.uptimeMillis();
+            if(d==null||uptime-dataLoadedAt>1150L){
+                d=new Data();dataLoadedAt=uptime;
+            }
+            if(page!=4)ensureGaugeArt();
+            real.save();real.scale(getWidth()/W,getHeight()/H);
             background(real);header(real);tabs(real);
             if(page==0)speedPage(real);
             else if(page==1)rpmPage(real);
@@ -619,7 +636,7 @@ public final class DashboardActivity extends Activity {
             else musicPage(real);
             bottom(real);real.restore();
             if(page==4 && getWindowVisibility()==View.VISIBLE)
-                postInvalidateDelayed(75L); // animated orb, limited to ~14fps
+                postInvalidateDelayed(125L); // ~8 fps, reduce load on ELM327 head units
         }
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX()*W/getWidth(),y=e.getY()*H/getHeight();
