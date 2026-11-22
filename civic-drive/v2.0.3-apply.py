@@ -242,8 +242,14 @@ handler='''if(requestCode==MUSIC_PERMISSION_REQUEST){
         }
         '''
 if len(matches)==1:
+    # Older MainActivity uses a different name for the request-code parameter.
+    signature=matches[0].group(0)
+    param=re.search(r'\(\s*int\s+(\w+)\s*,',signature)
+    if not param:
+        raise RuntimeError("Permission callback request parameter not found")
+    actual_handler=handler.replace('requestCode==',param.group(1)+'==')
     pos=matches[0].end()
-    content=content[:pos]+handler+content[pos:]
+    content=content[:pos]+actual_handler+content[pos:]
 elif len(matches)==0:
     extra='''    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
