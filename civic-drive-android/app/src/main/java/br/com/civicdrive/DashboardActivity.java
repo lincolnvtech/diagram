@@ -140,6 +140,10 @@ public final class DashboardActivity extends Activity {
                 applyTheme();
                 if(surface!=null)surface.invalidate();
                 dialog.dismiss();
+                if(choice==4){
+                    startActivity(new Intent(this,CyberpunkActivity.class));
+                    finish();
+                }
             })
             .setNegativeButton("Fechar",null).show();
     }
