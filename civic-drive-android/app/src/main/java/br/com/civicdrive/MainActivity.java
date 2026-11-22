@@ -171,6 +171,16 @@ public final class MainActivity extends Activity implements LocationListener {
         handler.post(ticker);
         requestGps();
         handler.postDelayed(this::tryAutoObd, 1100L);
+        // The Cyberpunk cockpit is a presentation Activity. This MainActivity
+        // keeps owning the existing Bluetooth/ELM327 worker and telemetry.
+        if(CivicTheme.index(this)==4&&state==null){
+            handler.postDelayed(()->{
+                if(!isShuttingDown&&!isFinishing()){
+                    dashboardOpen=true;
+                    safeStart(new Intent(this,CyberpunkActivity.class));
+                }
+            },620L);
+        }
     }
 
     private void updateTrip(double litresPerHour) {
@@ -527,7 +537,7 @@ public final class MainActivity extends Activity implements LocationListener {
             .setSingleChoiceItems(new String[]{"Nova · esfera animada", "Civic prata", "Nova · azul minimalista"},
                 getSharedPreferences("civic_wallpaper", MODE_PRIVATE).getInt("mode",0),
                 (d,which)->{ if(surface!=null)surface.useWallpaper(which);d.dismiss(); })
-            .setNeutralButton("4 TEMAS DE CORES",(d,w)->showThemes())
+            .setNeutralButton("5 TEMAS DE CORES",(d,w)->showThemes())
             .setNegativeButton("Cancelar",null).show();
     }
     private void openRadio(){
@@ -537,9 +547,16 @@ public final class MainActivity extends Activity implements LocationListener {
         // OEM radio activities are often not exported. Let the user choose an available app.
         openApplicationCatalog(true,1);
     }
-    private void openDashboards() { dashboardOpen = true; safeStart(new Intent(this, DashboardActivity.class)); }
+    private void openDashboards() {
+        dashboardOpen=true;
+        safeStart(new Intent(this,CivicTheme.index(this)==4?
+            CyberpunkActivity.class:DashboardActivity.class));
+    }
     private void openMusicDashboard(){
         dashboardOpen=true;
+        if(CivicTheme.index(this)==4){
+            safeStart(new Intent(this,CyberpunkActivity.class));return;
+        }
         Intent music=new Intent(this,DashboardActivity.class);
         music.putExtra("open_page",4);
         safeStart(music);
@@ -576,12 +593,16 @@ public final class MainActivity extends Activity implements LocationListener {
             .setPositiveButton("Fechar",null).show();
     }
     private void showThemes(){
-        new AlertDialog.Builder(this).setTitle("Civic Drive · 4 temas de cores")
+        new AlertDialog.Builder(this).setTitle("Civic Drive · 5 temas")
             .setSingleChoiceItems(CivicTheme.NAMES,CivicTheme.index(this),(dialog,index)->{
                 CivicTheme.select(this,index);
                 if(surface!=null)surface.invalidate();
                 Toast.makeText(this,"Tema "+CivicTheme.NAMES[index]+" aplicado",Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
+                if(index==4) {
+                    dashboardOpen=true;
+                    safeStart(new Intent(this,CyberpunkActivity.class));
+                }
             }).setNegativeButton("Fechar",null).show();
     }
 
@@ -640,7 +661,7 @@ public final class MainActivity extends Activity implements LocationListener {
     }
     private void showSettings() {
         new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
-            .setItems(new String[]{"TEMAS · 4 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera", "GPS / CarPlay", "Diagnóstico GPS"},
+            .setItems(new String[]{"TEMAS · 5 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera", "GPS / CarPlay", "Diagnóstico GPS"},
                 (d,which)->{
                     if(which==0){showThemes();return;}
                     if(which==1){showObdDiagnostics();return;}
@@ -660,7 +681,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.8")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.9")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
