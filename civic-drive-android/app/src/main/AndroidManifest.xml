@@ -42,6 +42,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".DashboardActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".CyberpunkActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".AppCatalogActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FaultCodesActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".CarHistoryActivity" android:exported="false" android:screenOrientation="landscape" />
