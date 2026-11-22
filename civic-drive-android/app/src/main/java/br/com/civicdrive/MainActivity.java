@@ -706,7 +706,7 @@ public final class MainActivity extends Activity implements LocationListener {
                         case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
                         case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
                         case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.9")
+                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.10")
                             .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
                             .setPositiveButton("OK",null).show();
                     }
