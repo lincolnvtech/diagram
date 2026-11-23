@@ -283,273 +283,221 @@ public final class MainActivity extends Activity implements LocationListener {
      * Native responsive HUD, without any baked-in telemetry or speed-color legend.
      * Draws only live GPS / OBD values. Its center is a small animated energy orb.
      */
+    /** Clean, single-theme cockpit. All drawing is procedural, no bitmap backdrops. */
     private final class Ui extends View {
-        private static final float CW=1648f, CH=928f;
-        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        private final Bitmap civic = BitmapFactory.decodeResource(getResources(), R.drawable.civic_cinema);
-        private final Bitmap approvedBackdrop = BitmapFactory.decodeResource(getResources(), R.drawable.civic_v191_base);
-        // Shared with the music dashboard; images are decoded only once.
-        private final CivicOrbRenderer orbRenderer=
-            new CivicOrbRenderer(MainActivity.this);
-        private final Drawable[] shortcuts = new Drawable[3];
-        private final String[] shortcutsNames = new String[3];
-        private int wallpaper = 0; // 0 = Nova (animated), 1 = Civic photo, 2 = quiet energy
-        // Plasma color and movement are driven by valid engine RPM only.
-        private float downX, downY;
-        private long downAt;
-        private boolean animationRunning = true;
-        private final float[] dockX = {174, 358, 542, 726, 910, 1094, 1278, 1462};
-        private final String[] dockNames = {"Início","Dash","Waze","Música","YouTube","Apps","Fundo","Nova"};
+        private static final float W=1648f,H=928f;
+        private static final int BLACK=0xff020407;
+        private static final int NEON=0xff10d7ff;
+        private static final int BLUE_NEON=0xff136ff4;
+        private static final int WHITE=0xfff1f8ff;
+        private static final int MUTED=0xff90abc2;
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF bounds=new RectF();
+        private final CivicOrbRenderer orb=new CivicOrbRenderer(MainActivity.this);
+        private final CivicMediaControls media=new CivicMediaControls(MainActivity.this);
+        private boolean running=true;
+        private float downX,downY;
+        private long touchedAt;
+        private final String[] dock={"DASH","GARAGEM","GPS","MÚSICA","APPS","NOVA"};
         Ui(){
             super(MainActivity.this);
-            wallpaper=getSharedPreferences("civic_wallpaper",MODE_PRIVATE).getInt("mode",0);
-            setContentDescription("Civic Drive. Nova em energia animada, temperatura, RPM e menu de aplicativos.");
+            setContentDescription("Civic Drive: tema preto e azul neon; OBD2, música e garagem.");
         }
-        void resumeAnimation() { animationRunning=true;invalidate(); }
-        void pauseAnimation() { animationRunning=false; }
-        void useWallpaper(int mode){ wallpaper=mode;getSharedPreferences("civic_wallpaper",MODE_PRIVATE).edit().putInt("mode",mode).apply();invalidate(); }
-        private void color(int c){
-            p.reset();p.setAntiAlias(true);p.setFilterBitmap(true);
-            p.setColor(CivicTheme.homeAccent(c,CivicTheme.index(MainActivity.this)));
+        void resumeAnimation(){running=true;invalidate();}
+        void pauseAnimation(){running=false;}
+        void useWallpaper(int ignored){invalidate();}
+
+        private int a(int color,int alpha){
+            return Color.argb(Math.max(0,Math.min(255,alpha)),
+                Color.red(color),Color.green(color),Color.blue(color));
         }
-        private void txt(Canvas c,String s,float x,float baseline,float size,int tint,boolean bold){
-            color(tint);p.setTextSize(size);p.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
-            c.drawText(s,x,baseline,p);
+        private void paint(int color){
+            p.reset();p.setAntiAlias(true);p.setColor(color);
+            p.setStyle(Paint.Style.FILL);
         }
-        private void center(Canvas c,String s,float x,float baseline,float size,int tint,boolean bold){
-            color(tint);p.setTextSize(size);p.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
-            c.drawText(s,x-p.measureText(s)/2,baseline,p);
+        private void line(Canvas c,float x1,float y1,float x2,float y2,int color,float width){
+            paint(color);p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(width);p.setStrokeCap(Paint.Cap.ROUND);
+            c.drawLine(x1,y1,x2,y2,p);p.setStyle(Paint.Style.FILL);
         }
-        private void line(Canvas c,float x1,float y1,float x2,float y2,int tint,float stroke){
-            color(tint);p.setStrokeWidth(stroke);p.setStrokeCap(Paint.Cap.ROUND);c.drawLine(x1,y1,x2,y2,p);
+        private void text(Canvas c,String value,float x,float y,float size,int color,
+                          boolean bold,boolean center){
+            paint(color);
+            p.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",
+                bold?Typeface.BOLD:Typeface.NORMAL));
+            p.setTextSize(size);
+            if(center)x-=p.measureText(value)*.5f;
+            c.drawText(value,x,y,p);
         }
-        private void outline(Canvas c,RectF rect,float radius,int tint,float stroke){
-            color(tint);p.setStrokeWidth(stroke);p.setStyle(Paint.Style.STROKE);c.drawRoundRect(rect,radius,radius,p);p.setStyle(Paint.Style.FILL);
-        }
-        private void glowBackground(Canvas c){
-            // Exact reference approved by the owner, with text/data removed in the authored asset.
-            // This preserves its glassy instrument rings and natural electric illumination.
-            if(approvedBackdrop!=null){
-                color(Color.WHITE);
-                p.setColorFilter(CivicTheme.artFilter(CivicTheme.index(MainActivity.this)));
-                c.drawBitmap(approvedBackdrop,null,new RectF(0,0,CW,CH),p);
-                p.setColorFilter(null);
-            } else {
-                color(Color.rgb(2,10,20));c.drawRect(0,0,CW,CH,p);
-            }
-            // Preserve screen boundaries on lower-resolution central units.
-            line(c,42,694,1606,694,Color.argb(60,26,110,190),1);
-            line(c,150,885,1500,885,Color.argb(55,21,111,179),2);
-        }
-        private int velocity(){
-            float live = gpsKmh >= 0 && System.currentTimeMillis()-lastGpsTime <= 30000 ? gpsKmh :
-                (obdConnected && obdSpeed >= 0 ? obdSpeed : -1f);
-            return live < 0 ? -1 : Math.round(live);
-        }
-        private int alpha(int color,int a){
-            return Color.argb(a,Color.red(color),Color.green(color),Color.blue(color));
-        }
-        private float orbVehicleSpeed(){
-            // Real OBD2 speed first; recent GPS only when an OBD2 reading
-            // is missing. Never infer km/h from RPM or music.
-            if(obdConnected && obdSpeed>=0)return obdSpeed;
-            if(gpsKmh>=0 && System.currentTimeMillis()-lastGpsTime<9000L)
-                return gpsKmh;
-            return -1f;
-        }
-        private void orb(Canvas c){
-            float level=musicReactive.frame(MainActivity.this,
-                android.os.SystemClock.uptimeMillis());
-            orbRenderer.draw(c,811f,263f,level,(float)rpm,
-                orbVehicleSpeed(),obdConnected);
-        }
-        private void civicWallpaper(Canvas c){
-            if(civic != null){
-                color(Color.WHITE);p.setAlpha(175);
-                c.drawBitmap(civic,null,new RectF(425,128,1223,520),p);
-                p.setAlpha(255);
-            }
-            center(c,"CIVIC",820,515,41,Color.rgb(205,222,243),true);
-        }
-        private void quietWallpaper(Canvas c){
-            color(Color.WHITE);
-            int palette=CivicTheme.index(MainActivity.this);
-            int accent=CivicTheme.color(palette,1);
-            p.setShader(new android.graphics.RadialGradient(820,300,210,
-                new int[]{alpha(accent,110),alpha(CivicTheme.color(palette,2),32),Color.TRANSPARENT},
-                null,android.graphics.Shader.TileMode.CLAMP));
-            c.drawCircle(820,300,210,p);p.setShader(null);
-            color(Color.rgb(19,105,184));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);
-            c.drawCircle(820,300,154,p);p.setStyle(Paint.Style.FILL);
-            // Papel de parede minimalista sem título na esfera.
-        }
-        private void header(Canvas c){
-            // Honda identity is part of the approved decoration; don't redraw it.
-            // Date/time must be live, never pre-printed in wallpaper.
-            java.util.Date date = new java.util.Date();
-            center(c,new java.text.SimpleDateFormat("HH:mm",PT).format(date),1423,53,46,
-                Color.rgb(232,245,255),true);
-            center(c,new java.text.SimpleDateFormat("EEE, dd/MM/yyyy",PT).format(date),1423,88,22,
-                Color.rgb(169,190,211),false);
-            line(c,1567,37,1593,37,Color.rgb(158,195,224),3);
-            line(c,1567,50,1593,50,Color.rgb(158,195,224),3);
-            line(c,1567,63,1593,63,Color.rgb(158,195,224),3);
-        }
-        private void gauge(Canvas c,float cx,float cy,boolean temp){
-            // Dial contours, ticks and blue reflections are in the approved art.
-            // Needle/progress and center numbers are live, not painted-in demo data.
-            final boolean available=obdConnected && (temp?coolant>-100:rpm>=0);
-            final float radius=177f;
-            final float f=available?Math.max(0f,Math.min(1f,temp?(coolant-40)/75f:(float)(rpm/8000d))):0f;
-            if(available){
-                final boolean hot=temp && coolant>=105;
-                final int accent=hot?Color.rgb(248,170,56):Color.rgb(15,167,234);
-                color(accent);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(8f);
-                c.drawArc(new RectF(cx-radius,cy-radius,cx+radius,cy+radius),143,253*f,false,p);
+        private void round(Canvas c,float x,float y,float w,float h,int radius,int fill,
+                           int outline){
+            bounds.set(x,y,x+w,y+h);
+            paint(fill);c.drawRoundRect(bounds,radius,radius,p);
+            if(Color.alpha(outline)>0){
+                paint(outline);p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.7f);c.drawRoundRect(bounds,radius,radius,p);
                 p.setStyle(Paint.Style.FILL);
             }
-            if(temp){
-                center(c,"ARREFECIMENTO",cx,cy-21,24,Color.rgb(199,217,231),false);
-                center(c,available?coolant+" °C":"— °C",cx,cy+52,61,Color.WHITE,true);
+        }
+        private void backdrop(Canvas c){
+            c.drawColor(BLACK);
+            paint(WHITE);
+            p.setShader(new android.graphics.RadialGradient(824,325,730,
+                new int[]{0xff092743,0xff030b17,BLACK},
+                new float[]{0f,.51f,1f},
+                android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0,0,W,H,p);p.setShader(null);
+            line(c,64,102,1584,102,a(NEON,110),1.6f);
+            line(c,68,736,1580,736,a(BLUE_NEON,110),1.7f);
+        }
+        private void header(Canvas c){
+            text(c,"CIVIC",90,55,40,WHITE,true,false);
+            text(c,"DRIVE",218,55,40,NEON,true,false);
+            text(c,"G8  ·  2011    /    PRETO + AZUL NEON",92,83,18,MUTED,false,false);
+            String current=new java.text.SimpleDateFormat("HH:mm",PT).format(new java.util.Date());
+            text(c,current,1395,58,44,WHITE,true,true);
+            text(c,"MENU",1527,84,19,NEON,true,true);
+            line(c,1574,27,1606,27,NEON,3);
+            line(c,1574,39,1606,39,NEON,3);
+            line(c,1574,51,1606,51,NEON,3);
+        }
+        private void gauge(Canvas c,float cx,float cy,float radius,String label,
+                           String value,String suffix,float ratio,boolean available){
+            paint(WHITE);
+            p.setShader(new android.graphics.RadialGradient(cx,cy,radius,
+                new int[]{0xff0c2135,0xff040b15,BLACK},null,
+                android.graphics.Shader.TileMode.CLAMP));
+            c.drawCircle(cx,cy,radius,p);p.setShader(null);
+            bounds.set(cx-radius+12,cy-radius+12,cx+radius-12,cy+radius-12);
+            paint(a(BLUE_NEON,110));
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.2f);
+            c.drawCircle(cx,cy,radius-8,p);
+            p.setStrokeWidth(9.5f);p.setStrokeCap(Paint.Cap.ROUND);
+            p.setColor(a(NEON,44));c.drawArc(bounds,146,248,false,p);
+            if(available){
+                p.setColor(NEON);c.drawArc(bounds,146,248*Math.min(1f,Math.max(0,ratio)),false,p);
+            }
+            p.setStyle(Paint.Style.FILL);
+            for(int i=0;i<=30;i++){
+                double theta=Math.toRadians(146+i*(248d/30d));
+                float inner=radius-(i%5==0?35:28),outer=radius-20;
+                line(c,cx+inner*(float)Math.cos(theta),cy+inner*(float)Math.sin(theta),
+                    cx+outer*(float)Math.cos(theta),cy+outer*(float)Math.sin(theta),
+                    a(i%5==0?WHITE:NEON,i%5==0?185:90),i%5==0?2.3f:1.4f);
+            }
+            text(c,label,cx,cy-35,23,MUTED,true,true);
+            text(c,value,cx,cy+38,available?71:63,WHITE,true,true);
+            text(c,suffix,cx,cy+86,25,available?NEON:MUTED,false,true);
+        }
+        private String rpmText(){
+            return !obdConnected||rpm<0?"—":String.format(PT,"%.1f",rpm/1000d);
+        }
+        private String tempText(){return !obdConnected||coolant<-100?"—":String.valueOf(coolant);}
+        private void musicButton(Canvas c,float cx,float cy,int kind){
+            paint(0xff07182a);c.drawCircle(cx,cy,36,p);
+            paint(a(NEON,170));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.6f);
+            c.drawCircle(cx,cy,35,p);p.setStyle(Paint.Style.FILL);
+            if(kind==0){
+                line(c,cx-13,cy-12,cx-13,cy+12,WHITE,3);
+                text(c,"◀",cx+7,cy+9,28,WHITE,true,true);
+            }else if(kind==2){
+                text(c,"▶",cx-7,cy+9,28,WHITE,true,true);
+                line(c,cx+13,cy-12,cx+13,cy+12,WHITE,3);
             }else{
-                center(c,available?String.format(PT,"%.1f",rpm/1000d):"—",cx,cy+20,67,Color.WHITE,true);
-                center(c,"×1000 RPM",cx,cy+65,23,Color.rgb(206,223,234),false);
+                text(c,media.isMusicActive()?"Ⅱ":"▶",cx,cy+11,32,WHITE,true,true);
             }
         }
         private void status(Canvas c){
-            // The approved layout uses a slim, almost-black translucent information ribbon.
-            RectF bar=new RectF(75,559,1573,680);
-            color(Color.argb(112,2,12,25));c.drawRoundRect(bar,13,13,p);
-            outline(c,bar,13,Color.argb(84,33,109,172),1.2f);
-            line(c,531,577,531,660,Color.rgb(15,73,106),1.6f);
-            line(c,1045,577,1045,660,Color.rgb(15,73,106),1.6f);
-            txt(c,"OBD2",171,602,24,Color.rgb(164,193,213),false);
-            txt(c,obdStatus,171,646,34,obdConnected?Color.rgb(42,204,232):Color.rgb(201,208,223),true);
-            // A temperatura já aparece no mostrador esquerdo: usar o espaço
-            // para a marcha estimada, nunca fingir que é leitura PRND da ECU.
-            txt(c,"MARCHA ESTIMADA",614,602,24,Color.rgb(164,193,213),false);
-            boolean gearFresh=obdConnected && estimatedGear>=1 && estimatedGear<=5
-                    && estimatedGearConfidence>=55 && estimatedGearAt>0
-                    && System.currentTimeMillis()-estimatedGearAt<10000L;
-            String gearDisplay=gearFresh?(estimatedGear+"ª  EST."):
-                !obdConnected?"— · SEM OBD2":
-                estimatedGearAt<=0||System.currentTimeMillis()-estimatedGearAt>10000L?
-                "— · SEM DADOS":"— · "+estimatedGearReason;
-            txt(c,gearDisplay,614,646,gearFresh?35:28,
-                    gearFresh?Color.rgb(58,199,239):Color.rgb(176,190,205),true);
-            txt(c,"CONSUMO ESTIMADO",1136,602,24,Color.rgb(164,193,213),false);
-            txt(c,avgKmL>=0?String.format(PT,"%.1f km/L",avgKmL):"— km/L",1136,646,34,Color.WHITE,true);
-        }
-        private void icon(Canvas c,int kind,float x,float y,int tint){
-            color(tint);p.setStrokeWidth(4f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);p.setStyle(Paint.Style.STROKE);
-            android.graphics.Path shape=new android.graphics.Path();
-            switch(kind){
-                case 0: // Home
-                    shape.moveTo(x-23,y);shape.lineTo(x,y-24);shape.lineTo(x+23,y);shape.lineTo(x+19,y+24);
-                    shape.lineTo(x+6,y+24);shape.lineTo(x+6,y+6);shape.lineTo(x-6,y+6);shape.lineTo(x-6,y+24);
-                    shape.lineTo(x-19,y+24);shape.close();c.drawPath(shape,p);break;
-                case 1: // Gauge
-                    c.drawArc(new RectF(x-24,y-20,x+24,y+28),190,160,false,p);
-                    c.drawLine(x,y+6,x+17,y-12,p);break;
-                case 2: // Waze / speech
-                    c.drawRoundRect(new RectF(x-23,y-21,x+22,y+15),14,14,p);
-                    c.drawLine(x-6,y+15,x-10,y+23,p);
-                    c.drawCircle(x+10,y-4,2,p);break;
-                case 3: // Música
-                    c.drawCircle(x-12,y+17,8,p);
-                    c.drawCircle(x+18,y+9,8,p);
-                    c.drawLine(x-4,y+17,x-4,y-22,p);
-                    c.drawLine(x+26,y+9,x+26,y-27,p);
-                    c.drawLine(x-4,y-22,x+26,y-27,p);break;
-                case 4: // YouTube - ícone play; não confundir com o botão de adicionar
-                    c.drawRoundRect(new RectF(x-27,y-19,x+27,y+19),8,8,p);
-                    shape.moveTo(x-7,y-11);shape.lineTo(x+12,y);
-                    shape.lineTo(x-7,y+11);shape.close();c.drawPath(shape,p);break;
-                case 5: // Apps
-                    for(int col=-1;col<=1;col++)for(int row=-1;row<=1;row++){
-                        c.drawRoundRect(new RectF(x+col*14-4,y+row*14-4,x+col*14+4,y+row*14+4),2,2,p);
-                    }break;
-                case 6: // Wallpaper
-                    c.drawRoundRect(new RectF(x-25,y-21,x+25,y+22),5,5,p);
-                    shape.moveTo(x-18,y+14);shape.lineTo(x-4,y);shape.lineTo(x+6,y+10);
-                    shape.lineTo(x+14,y+1);shape.lineTo(x+22,y+14);c.drawPath(shape,p);
-                    c.drawCircle(x+14,y-11,4,p);break;
-                case 7: // Nova waveform
-                    shape.moveTo(x-27,y);shape.lineTo(x-15,y);shape.lineTo(x-8,y-15);shape.lineTo(x+1,y+18);
-                    shape.lineTo(x+8,y-16);shape.lineTo(x+16,y);shape.lineTo(x+27,y);c.drawPath(shape,p);break;
-            }
-            p.setStyle(Paint.Style.FILL);
+            round(c,85,570,1478,143,14,a(0xff07182a,220),a(NEON,75));
+            line(c,546,586,546,699,a(BLUE_NEON,150),1.6f);
+            line(c,900,586,900,699,a(BLUE_NEON,150),1.6f);
+            text(c,"CONEXÃO OBD2",117,609,22,MUTED,true,false);
+            text(c,obdConnected?"CONECTADO":obdStatus.toUpperCase(PT),
+                 117,650,34,obdConnected?NEON:WHITE,true,false);
+            text(c,"Toque para diagnóstico",117,686,19,MUTED,false,false);
+            text(c,"MARCHA ESTIMADA",580,609,22,MUTED,true,false);
+            boolean valid=obdConnected&&estimatedGear>0 &&
+                System.currentTimeMillis()-estimatedGearAt<10000L;
+            text(c,valid?estimatedGear+"ª  EST.":"—  SEM LEITURA",580,657,32,
+                 valid?NEON:WHITE,true,false);
+            text(c,"Não é posição PRND",580,690,19,MUTED,false,false);
+            text(c,"MÚSICA   ·   ANDROID",938,604,21,MUTED,true,false);
+            musicButton(c,1195,654,0);
+            musicButton(c,1320,654,1);
+            musicButton(c,1445,654,2);
+            text(c,"ANTERIOR",1195,706,16,MUTED,false,true);
+            text(c,"TOCAR/PAUSAR",1320,706,16,MUTED,false,true);
+            text(c,"PRÓXIMA",1445,706,16,MUTED,false,true);
         }
         private void dock(Canvas c){
-            for(int i=0;i<dockX.length;i++){
-                float x=dockX[i];int tint=i==0?Color.rgb(45,205,244):Color.rgb(200,219,235);
-                boolean custom=i>=2&&i<=4;
-                String label=dockNames[i];
-                if(custom){
-                    int slot=i-2;
-                    String pkg=slotPackage(slot),activity=slotActivity(slot);
-                    String customLabel=getSharedPreferences(HOME_PREFS,MODE_PRIVATE).getString("label"+slot,"");
-                    if(!pkg.isEmpty()){
-                        label=customLabel.isEmpty()?"Atalho":customLabel;
-                        try{
-                            String key=pkg+"/"+activity;
-                            if(!key.equals(shortcutsNames[slot])||shortcuts[slot]==null){
-                                shortcutsNames[slot]=key;
-                                shortcuts[slot]=activity.isEmpty()?getPackageManager().getApplicationIcon(pkg):getPackageManager().getActivityIcon(new ComponentName(pkg,activity));
-                            }
-                            Drawable icon=shortcuts[slot];icon.setBounds((int)x-25,749,(int)x+25,799);icon.draw(c);
-                        }catch(Exception e){icon(c,i,x,774,tint);}
-                    }else icon(c,i,x,774,tint);
-                }else icon(c,i,x,774,tint);
-                if(label.length()>10)label=label.substring(0,9)+"…";
-                center(c,label,x,851,23,i==0?Color.rgb(62,212,244):Color.rgb(185,204,224),i==0);
+            for(int i=0;i<dock.length;i++){
+                float cx=(i+.5f)*W/6f;
+                round(c,cx-122,765,244,122,14,0xff06101c,
+                    i==0?a(NEON,155):a(BLUE_NEON,86));
+                text(c,new String[]{"◴","▱","◎","♫","▦","✧"}[i],
+                     cx,815,39,NEON,false,true);
+                text(c,dock[i],cx,861,24,WHITE,true,true);
+                if(i==0)line(c,cx-64,887,cx+64,887,NEON,3.4f);
             }
-            line(c,125,875,223,875,Color.rgb(36,196,242),3);
         }
-        @Override protected void onDraw(Canvas c){
-            super.onDraw(c);c.save();c.scale(getWidth()/CW,getHeight()/CH);
-            glowBackground(c);header(c);
-            if(wallpaper==1)civicWallpaper(c);else if(wallpaper==2)quietWallpaper(c);else orb(c);
-            gauge(c,303,334,true);gauge(c,1324,334,false);
-            center(c,"TEMA  "+CivicTheme.NAMES[CivicTheme.index(MainActivity.this)].toUpperCase(PT),
-                   810,543,23,CivicTheme.color(CivicTheme.index(MainActivity.this),1),true);
-            status(c);dock(c);
-            c.restore();
-            // Deliberately limit CPU usage on older Android head units.
-            if(animationRunning && wallpaper==0 && getWindowVisibility()==View.VISIBLE)
-                postInvalidateDelayed(110); // ~9 fps: preserva CPU para Bluetooth e ELM327
+        @Override protected void onDraw(Canvas actual){
+            super.onDraw(actual);
+            actual.save();actual.scale(getWidth()/W,getHeight()/H);
+            backdrop(actual);header(actual);
+            gauge(actual,305,327,169,"ARREFECIMENTO",tempText(),"°C",
+                (coolant-40f)/80f,obdConnected&&coolant>-100);
+            gauge(actual,1342,327,169,"ROTAÇÃO",rpmText(),"×1000 RPM",
+                (float)rpm/8000f,obdConnected&&rpm>=0);
+            float energy=musicReactive.frame(MainActivity.this,
+                android.os.SystemClock.uptimeMillis());
+            float speed=obdConnected&&obdSpeed>=0?obdSpeed:
+                gpsKmh>=0&&System.currentTimeMillis()-lastGpsTime<9000L?gpsKmh:-1f;
+            orb.draw(actual,823,331,energy,(float)rpm,speed,obdConnected&&rpm>=0);
+            text(actual,"NOVA",824,545,28,NEON,true,true);
+            status(actual);dock(actual);
+            actual.restore();
+            if(running&&getWindowVisibility()==View.VISIBLE)
+                postInvalidateDelayed(145L); // approx. 7 fps, lightweight
         }
-        @Override public boolean onTouchEvent(MotionEvent e){
-            float x=e.getX()*CW/getWidth(),y=e.getY()*CH/getHeight();
-            if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;downAt=android.os.SystemClock.uptimeMillis();return true;}
-            if(e.getAction()==MotionEvent.ACTION_UP){
-                if(Math.abs(x-downX)>42||Math.abs(y-downY)>42)return true;
-                performClick();
-                if(android.os.SystemClock.uptimeMillis()-downAt>650){
-                    if(y<720){pickWallpaper();return true;}
-                    if(y>730 && x>=400 && x<=1035){
-                        int slot=Math.round((x-542)/184);if(slot>=0&&slot<3)openApplicationCatalog(true,slot);
-                    }
-                    return true;
-                }
-                if(y>731){
-                    int idx=Math.round((x-174)/184);if(idx<0||idx>=dockX.length||Math.abs(x-dockX[idx])>83)return true;
-                    switch(idx){
-                        case 0:break;
-                        case 1:openDashboards();break;
-                        case 2:if(slotPackage(0).isEmpty())openWaze();else openShortcut(0);break;
-                        case 3:if(slotPackage(1).isEmpty())openMusic();else openShortcut(1);break;
-                        case 4:if(slotPackage(2).isEmpty())openYouTube();else openShortcut(2);break;
-                        case 5:showInstalledApps();break;
-                        case 6:pickWallpaper();break;
-                        case 7:safeStart(new Intent(MainActivity.this,NovaActivity.class));break;
-                    }
-                }else if(x>1525 && y<110)showMenu();
-                else if(y>=573 && y<=690 && x<560)chooseObdDevice();
-                else if(y>=573 && y<=690 && x<1045)showGearDiagnostics();
-                else if(y>=573 && y<=690)openDashboards();
-                else if(x>495&&x<1140&&y>110&&y<555)safeStart(new Intent(MainActivity.this,NovaActivity.class));
-                else if(y>130&&y<546)openDashboards();
+        private void mediaCommand(int keyCode){
+            boolean active=media.isMusicActive();
+            boolean sent=media.send(keyCode);
+            Toast.makeText(MainActivity.this,
+                sent&&active?"Comando enviado ao player Android":
+                    "Sem player Android ativo. CarPlay: use o CPLink.",
+                Toast.LENGTH_SHORT).show();
+        }
+        @Override public boolean onTouchEvent(MotionEvent event){
+            float x=event.getX()*W/getWidth(),y=event.getY()*H/getHeight();
+            if(event.getAction()==MotionEvent.ACTION_DOWN){
+                downX=x;downY=y;touchedAt=android.os.SystemClock.uptimeMillis();return true;
+            }
+            if(event.getAction()!=MotionEvent.ACTION_UP)return true;
+            if(Math.abs(x-downX)>40||Math.abs(y-downY)>40)return true;
+            performClick();
+            if(y<109&&x>1430){showMenu();return true;}
+            if(y>770){
+                int slot=Math.max(0,Math.min(5,(int)(x/(W/6f))));
+                if(slot==0)openDashboards();
+                else if(slot==1)openGarage();
+                else if(slot==2)CivicNavigation.showChooser(MainActivity.this);
+                else if(slot==3)openMusicDashboard();
+                else if(slot==4)showInstalledApps();
+                else safeStart(new Intent(MainActivity.this,NovaActivity.class));
+                return true;
+            }
+            if(y>=570&&y<=730){
+                if(x<540)showObdDiagnostics();
+                else if(x<902)showGearDiagnostics();
+                else if(x>=1140&&x<1253)mediaCommand(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS);
+                else if(x>=1253&&x<1390)mediaCommand(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+                else if(x>=1390&&x<1510)mediaCommand(android.view.KeyEvent.KEYCODE_MEDIA_NEXT);
+                else openMusicDashboard();
+                return true;
+            }
+            if(y>125&&y<550){
+                if(x>610&&x<1030)safeStart(new Intent(MainActivity.this,NovaActivity.class));
+                else showObdDiagnostics();
                 return true;
             }
             return true;
