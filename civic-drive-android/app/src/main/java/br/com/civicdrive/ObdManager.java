@@ -37,7 +37,20 @@ public final class ObdManager {
     private volatile long generation = 0L;
     private volatile long connectStartedAt = 0L;
     private volatile String lastIssue = "Aguardando adaptador ELM327";
-    public String diagnostics() { return lastIssue; }
+    private volatile boolean stableMode=true;
+    private volatile long lastGoodAt=0L;
+    private volatile int connectionAttempts=0,successfulConnections=0;
+    public void setStableMode(boolean value){stableMode=value;}
+    public boolean isStableMode(){return stableMode;}
+    public String diagnostics(){
+        long at=lastGoodAt;
+        String fresh=at<=0?"nenhuma resposta da ECU":
+            ((android.os.SystemClock.elapsedRealtime()-at)/1000L)+"s desde a última leitura";
+        return "Último evento: "+lastIssue+"\n"
+            +"Sessões Bluetooth tentadas: "+connectionAttempts+"\n"
+            +"Sessões com resposta da ECU: "+successfulConnections+"\n"
+            +"Última leitura: "+fresh;
+    }
 
     /** Stop a platform socket stalled before the first ECU reply; caller retries later. */
     public synchronized boolean abortStalledConnection(long timeoutMs) {
@@ -70,6 +83,7 @@ public final class ObdManager {
         close();
         stopped = false;
         lastIssue="Conectando ao ELM327";
+        connectionAttempts++;
         connectStartedAt=android.os.SystemClock.elapsedRealtime();
         final long session=++generation;
         worker = new Thread(() -> runSession(device,session), "civic-elm327");
@@ -102,13 +116,15 @@ public final class ObdManager {
             InputStream in = active.getInputStream();
             OutputStream out = active.getOutputStream();
             // Falha isolada de comando AT não deve desligar o Bluetooth inteiro.
-            optionalCommand(out,in,"ATZ",5800);
-            optionalCommand(out,in,"ATE0",1800);
-            optionalCommand(out,in,"ATL0",1800);
-            optionalCommand(out,in,"ATS0",1800);
-            optionalCommand(out,in,"ATH0",1800);
-            optionalCommand(out,in,"ATSP0",2500);
-            optionalCommand(out,in,"ATAT1",1200);
+            // The ELM327 is already powered. ATZ hard-reset caused some cheap
+            // adapters to lose their Bluetooth socket on every reconnect.
+            // Use a gentle protocol initialization and keep it read-only.
+            optionalCommand(out,in,"ATE0",1100);
+            optionalCommand(out,in,"ATL0",1100);
+            optionalCommand(out,in,"ATS0",1100);
+            optionalCommand(out,in,"ATH0",1100);
+            optionalCommand(out,in,"ATSP0",3000);
+            optionalCommand(out,in,"ATAT1",1100);
 
             // OBD2 principal em todas as voltas; apenas UM sensor extra por volta.
             // Um PID ausente ou lento nunca derruba sozinho o ELM327.
@@ -130,8 +146,10 @@ public final class ObdManager {
                 // tensão alternam; nunca consultar os quatro em todas as voltas.
                 double rpm=parseRpm(optionalCommand(out,in,"010C",2500));
                 int speed=parseSpeed(optionalCommand(out,in,"010D",2300));
-                int temp=n%4==0?parseTemperature(optionalCommand(out,in,"0105",2000)):-999;
-                float volts=n%12==0?parseVoltage(optionalCommand(out,in,"ATRV",1600)):-1;
+                int temp=n%(stableMode?8:4)==0?
+                    parseTemperature(optionalCommand(out,in,"0105",1900)):-999;
+                float volts=n%(stableMode?20:12)==0?
+                    parseVoltage(optionalCommand(out,in,"ATRV",1400)):-1;
                 if (stopped || generation != session) break;
                 long now=android.os.SystemClock.elapsedRealtime();
                 if (rpm>=0) {lastRpm=rpm;rpmAt=now;}
@@ -147,10 +165,12 @@ public final class ObdManager {
                 boolean ecuResponded=rpm>=0 || speed>=0 || temp>-100;
                 if (ecuResponded) {
                     lastEcuAt=now;
+                    lastGoodAt=now;
                     if (!dataReady) {
                         dataReady=true;
                         linkReady=true;
                         connectStartedAt=0L;
+                        successfulConnections++;
                         lastIssue="Dados ECU recebidos";
                         notifyStatus("OBD2 conectado  •  dados reais",true);
                     }
@@ -167,7 +187,7 @@ public final class ObdManager {
                 // Cheap ELM327 clones can lock up when too many unsupported PIDs
                 // are requested. Prioritize stable RPM/speed; probe extras slowly.
                 // No optional query in the initial handshake.
-                boolean probeExtra=ecuResponded && n>=4 && n%12==4;
+                boolean probeExtra=!stableMode && ecuResponded && n>=4 && n%12==4;
                 if (probeExtra) optionalRound++;
                 if (probeExtra && (which!=1 || !directFuelSupported) && System.currentTimeMillis()>=retryExtrasAt[which]) {
                     String result=optionalCommand(out,in,extraPids[which],1500);
@@ -212,7 +232,7 @@ public final class ObdManager {
                     }
                 }
                 // Moderate request rate keeps low-cost adapters responsive.
-                Thread.sleep(ecuResponded?850L:1200L);
+                Thread.sleep(ecuResponded?(stableMode?1050L:850L):1200L);
             }
         } catch (Exception e) {
             if (!stopped && generation == session) {
