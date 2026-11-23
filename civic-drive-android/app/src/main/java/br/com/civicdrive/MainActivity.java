@@ -556,62 +556,60 @@ public final class MainActivity extends Activity implements LocationListener {
             .setMessage(status)
             .setPositiveButton("Fechar",null).show();
     }
-    private void showThemes(){
-        new AlertDialog.Builder(this).setTitle("Civic Drive · 5 temas")
-            .setSingleChoiceItems(CivicTheme.NAMES,CivicTheme.index(this),(dialog,index)->{
-                CivicTheme.select(this,index);
-                if(surface!=null)surface.invalidate();
-                Toast.makeText(this,"Tema "+CivicTheme.NAMES[index]+" aplicado",Toast.LENGTH_SHORT).show();
-                dialog.dismiss();
-                if(index==4) {
-                    dashboardOpen=true;
-                    safeStart(new Intent(this,CyberpunkActivity.class));
-                }
-            }).setNegativeButton("Fechar",null).show();
+    private void showAppearance(){
+        new AlertDialog.Builder(this)
+            .setTitle("Preto + azul neon")
+            .setMessage("Tema único, sem fotos de fundo. A garagem permite personalizar o desenho do Civic.")
+            .setPositiveButton("GARAGEM",(d,w)->openGarage())
+            .setNegativeButton("Fechar",null).show();
     }
 
     /** Safe local diagnostic: no Bluetooth address, private token or ECU commands. */
     private void showObdDiagnostics(){
-        String mode=obdConnected?"Conectado":obd!=null && obd.isActive()?"Conectando":"Desconectado";
-        String last=obd==null?"Adaptador não iniciado":obd.diagnostics();
+        String mode=obdConnected?"ECU respondendo":
+            obd!=null&&obd.isActive()?"Bluetooth em conexão/leitura":"Desconectado";
         String message="Estado: "+mode+"\n"
-            +"Último evento: "+last+"\n"
-            +"Reconexão automática: "+(autoObdEnabled?"ativada":"desativada")+"\n"
-            +"RPM: "+(rpm>=0?String.format(PT,"%.0f",rpm):"sem leitura")+"\n"
-            +"Temperatura: "+(coolant>-100?coolant+" °C":"sem leitura")+"\n\n"
-            +"Com a ignição ligada, confira se o ELM327 está pareado no Bluetooth. "
-            +"Se o carro estiver desligado, a ECU pode não responder.";
-        new AlertDialog.Builder(this).setTitle("Civic Drive · Diagnóstico OBD2")
+            +"Perfil: "+(obd!=null&&obd.isStableMode()?"ESTÁVEL (RPM/velocidade)":
+              "COMPLETO (sensores adicionais)")+"\n"
+            +"Reconexão: "+(autoObdEnabled?"automática":"desativada")+"\n"
+            +(obd==null?"Sem gerenciador":obd.diagnostics())+"\n\n"
+            +"RPM: "+(rpm>=0?String.format(PT,"%.0f",rpm):"—")+"  "
+            +"Temperatura: "+(coolant>-100?coolant+" °C":"—")+"\n\n"
+            +"Teste com o motor ligado e ELM327 pareado no Android da central. "
+            +"O CPLink pode usar outra ligação Bluetooth.";
+        new AlertDialog.Builder(this).setTitle("Civic Drive · OBD2")
             .setMessage(message)
-            .setNeutralButton("SELECIONAR ADAPTADOR",(d,w)->chooseObdDevice())
+            .setNeutralButton("TROCAR ELM327",(d,w)->chooseObdDevice())
             .setPositiveButton("Fechar",null).show();
     }
 
-    private void showMenu() {
-        final String[] entries={"Aplicativos da central (ícones)","Adicionar atalho na home","Dashboards","Ler falhas do carro","Histórico local do Civic","Nova Total","Trocar adaptador OBD2","Mapas","Waze","Música","YouTube e som","Bluetooth","Atualizar pelo GitHub","Ajustes","Temas","GPS / CarPlay","Diagnóstico GPS"};
-        new AlertDialog.Builder(this).setTitle("Civic G8 · Menu")
-                .setItems(entries,(d,w)->{
-                    switch(w){
-                        case 0:openApplicationCatalog(false,-1);break;
-                        case 1:chooseShortcutSlot();break;
-                        case 2:openDashboards();break;
-                        case 3:safeStart(new Intent(this,FaultCodesActivity.class));break;
-                        case 4:safeStart(new Intent(this,CarHistoryActivity.class));break;
-                        case 5:safeStart(new Intent(this,NovaActivity.class));break;
-                        case 6:chooseObdDevice();break;
-                        case 7:openPackage("com.google.android.apps.maps");break;
-                        case 8:openWaze();break;
-                        case 9:openMusic();break;
-                        case 10:showYoutubeSettings();break;
-                        case 11:safeStart(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));break;
-                        case 12:updates.checkForUpdates();break;
-                        case 14:showThemes();break;
-                        case 15:CivicNavigation.showChooser(this);break;
-                        case 16:CivicNavigation.showGpsDiagnostics(this);break;
-                        default:showSettings();
-                    }
-                }).setNegativeButton("Fechar",null).show();
+    private void showMenu(){
+        final String[] entries={
+            "Garagem · desenho do Civic","Painéis de instrumentos",
+            "Música · player e controles","GPS / Waze / CarPlay",
+            "Diagnóstico OBD2","Escolher adaptador ELM327",
+            "Nova Total","Aplicativos da central","Histórico do Civic",
+            "Ler falhas OBD2","Atualizar pelo GitHub",
+            "Ajustes"};
+        new AlertDialog.Builder(this).setTitle("Civic Drive · Menu")
+            .setItems(entries,(d,which)->{
+                switch(which){
+                    case 0:openGarage();break;
+                    case 1:openDashboards();break;
+                    case 2:openMusicDashboard();break;
+                    case 3:CivicNavigation.showChooser(this);break;
+                    case 4:showObdDiagnostics();break;
+                    case 5:chooseObdDevice();break;
+                    case 6:safeStart(new Intent(this,NovaActivity.class));break;
+                    case 7:showInstalledApps();break;
+                    case 8:safeStart(new Intent(this,CarHistoryActivity.class));break;
+                    case 9:safeStart(new Intent(this,FaultCodesActivity.class));break;
+                    case 10:updates.checkForUpdates();break;
+                    case 11:showSettings();break;
+                }
+            }).setNegativeButton("Fechar",null).show();
     }
+
     private void chooseShortcutSlot(){
         new AlertDialog.Builder(this).setTitle("Escolha o atalho da tela inicial")
                 .setItems(new String[]{"Atalho 1","Atalho 2","Atalho 3"},
@@ -623,34 +621,39 @@ public final class MainActivity extends Activity implements LocationListener {
                         .show())
                 .setNegativeButton("Cancelar",null).show();
     }
-    private void showSettings() {
-        new AlertDialog.Builder(this).setTitle("Civic G8 · Ajustes")
-            .setItems(new String[]{"TEMAS · 5 CORES", "DIAGNÓSTICO OBD2", "Trocar ELM327", "Atualizar GitHub", "Configurar Nova", "Reiniciar média de consumo", "Conexão OBD2 automática", "Atalhos da home", "Plano de fundo", "Definir tela inicial", "Configurações Android", "Permitir GPS", "Sobre", "Diagnóstico da esfera", "GPS / CarPlay", "Diagnóstico GPS"},
-                (d,which)->{
-                    if(which==0){showThemes();return;}
-                    if(which==1){showObdDiagnostics();return;}
-                    if(which==13){showOrbDiagnostics();return;}
-                    if(which==14){CivicNavigation.showChooser(this);return;}
-                    if(which==15){CivicNavigation.showGpsDiagnostics(this);return;}
-                    switch(which-2){
-                        case 0:chooseObdDevice();break;
-                        case 1:updates.checkForUpdates();break;
-                        case 2:safeStart(new Intent(this,NovaActivity.class));break;
-                        case 3:new AlertDialog.Builder(this).setTitle("Zerar consumo da viagem?")
-                            .setMessage("Isso zera só o cálculo estimado, não os dados do carro.")
-                            .setNegativeButton("Cancelar",null).setPositiveButton("Zerar",(a,b)->resetTrip()).show();break;
-                        case 4:toggleAutomaticObd();break;
-                        case 5:chooseShortcutSlot();break;
-                        case 6:pickWallpaper();break;
-                        case 7:safeStart(new Intent(Settings.ACTION_HOME_SETTINGS));break;
-                        case 8:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
-                        case 9:requestGps();break;
-                        default:new AlertDialog.Builder(this).setTitle("Civic G8 2.0.10")
-                            .setMessage("Versão independente para Civic 2011. O GPS mede a velocidade; temperatura e RPM dependem de um ELM327 clássico. Consumo é estimativa com PID 015E ou MAF (0110), quando suportados. Sem leitura, exibimos —. O painel original do carro continua sendo a referência para dirigir.")
-                            .setPositiveButton("OK",null).show();
-                    }
-                }).setNegativeButton("Fechar",null).show();
+    private void showSettings(){
+        final String[] entries={
+            "Visual fixo · preto + azul neon","Garagem · cor, tamanho e posição",
+            "OBD2 · ver diagnóstico","OBD2 · modo estável/completo",
+            "OBD2 · escolher adaptador","OBD2 · reconexão automática",
+            "Música · escolher fonte","GPS / CarPlay","Atualizar pelo GitHub",
+            "Resetar consumo estimado","Configurações Android","Sobre"};
+        new AlertDialog.Builder(this).setTitle("Civic Drive · Ajustes")
+            .setItems(entries,(d,which)->{
+                switch(which){
+                    case 0:showAppearance();break;
+                    case 1:openGarage();break;
+                    case 2:showObdDiagnostics();break;
+                    case 3:toggleStableObd();break;
+                    case 4:chooseObdDevice();break;
+                    case 5:toggleAutomaticObd();break;
+                    case 6:openMusicDashboard();break;
+                    case 7:CivicNavigation.showChooser(this);break;
+                    case 8:updates.checkForUpdates();break;
+                    case 9:new AlertDialog.Builder(this)
+                        .setTitle("Zerar consumo da viagem?")
+                        .setMessage("Apaga só a média estimada do percurso, não dados do carro.")
+                        .setNegativeButton("Cancelar",null)
+                        .setPositiveButton("Zerar",(a,b)->resetTrip()).show();break;
+                    case 10:safeStart(new Intent(Settings.ACTION_SETTINGS));break;
+                    case 11:new AlertDialog.Builder(this).setTitle("Civic Drive 2.1.0")
+                        .setMessage("Preto/azul neon, garagem offline e modo OBD2 estável. "
+                            +"RPM/temperatura dependem do ELM327; CarPlay usa o CPLink.")
+                        .setPositiveButton("OK",null).show();break;
+                }
+            }).setNegativeButton("Fechar",null).show();
     }
+
     private void showInstalledApps() { openApplicationCatalog(false,-1); }
     private void openPackage(String name) {
         Intent i=getPackageManager().getLaunchIntentForPackage(name);
@@ -869,6 +872,24 @@ public final class MainActivity extends Activity implements LocationListener {
             }).setNegativeButton("Cancelar",null).show();
         }catch(SecurityException e){Toast.makeText(this,"Autorize o Bluetooth",Toast.LENGTH_LONG).show();}
     }
+    private void toggleStableObd(){
+        if(obd==null)return;
+        boolean stable=!obd.isStableMode();
+        getSharedPreferences(OBD_PREFS,MODE_PRIVATE).edit()
+            .putBoolean("stable",stable).apply();
+        obd.setStableMode(stable);
+        if(obd.isActive()){
+            obd.close();
+            obdConnected=false;
+            obdStatus="Reconfigurando";
+            nextObdRetryMs=System.currentTimeMillis()+3000L;
+        }
+        Toast.makeText(this,stable?
+            "OBD2 ESTÁVEL: prioriza RPM, velocidade e temperatura":
+            "OBD2 COMPLETO: sensores adicionais também são consultados",
+            Toast.LENGTH_LONG).show();
+    }
+
     private void toggleAutomaticObd() {
         autoObdEnabled = !autoObdEnabled;
         getSharedPreferences(OBD_PREFS, MODE_PRIVATE).edit().putBoolean("auto",autoObdEnabled).apply();
