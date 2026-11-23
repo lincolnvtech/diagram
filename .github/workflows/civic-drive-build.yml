@@ -78,8 +78,10 @@ jobs:
           if grep -q 'android.permission.RECORD_AUDIO' "$ROOT/app/src/main/AndroidManifest.xml"; then
             echo 'ERRO: acesso desnecessário ao microfone'; exit 1
           fi
-          grep -q 'for(int i=0;i<20;i++)' "$C/CivicOrbRenderer.java"
+          grep -q 'for(int i=0;i<12;i++)' "$C/CivicOrbRenderer.java"
           grep -q 'private void lightning(' "$C/CivicOrbRenderer.java"
+          grep -q 'CivicPlasmaReference.decode()' "$C/CivicOrbRenderer.java"
+          test -s "$C/CivicPlasmaReference.java"
           echo 'OK: visual, garagem, música, modo OBD2 estável e novo plasma.'
       - name: Instalar ferramentas do Android
         shell: bash
