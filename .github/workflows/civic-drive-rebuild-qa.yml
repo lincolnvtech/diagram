@@ -1,7 +1,7 @@
 name: Civic Drive Rebuild QA
 on:
   push:
-    branches: [civic-drive-rebuild-20261123]
+    branches: [civic-drive-plasma-20261123]
     paths:
       - 'civic-drive-android/**'
       - '.github/workflows/civic-drive-rebuild-qa.yml'
@@ -35,8 +35,8 @@ jobs:
           set -Eeuo pipefail
           ROOT=civic-drive-android
           C="$ROOT/app/src/main/java/br/com/civicdrive"
-          grep -q "versionCode 34" "$ROOT/app/build.gradle"
-          grep -q "versionName '2.1.0'" "$ROOT/app/build.gradle"
+          grep -q "versionCode 35" "$ROOT/app/build.gradle"
+          grep -q "versionName '2.1.1'" "$ROOT/app/build.gradle"
           test -s "$C/GarageActivity.java"
           grep -q 'setCarColor' "$C/CivicCarView.java"
           grep -q 'setZoom' "$C/CivicCarView.java"
@@ -54,7 +54,11 @@ jobs:
           if grep -q 'approvedBackdrop' "$C/MainActivity.java"; then
             echo "REPROVADO: imagem estática na home"; exit 1
           fi
-          echo "OK: home preta/neon, garagem vetorial, música, estabilidade OBD2."
+          grep -q 'for(int i=0;i<20;i++)' "$C/CivicOrbRenderer.java"
+          grep -q 'private void lightning(' "$C/CivicOrbRenderer.java"
+          grep -q 'glowArc(' "$C/CivicOrbRenderer.java"
+          if grep -q 'new Visualizer(' "$C/MusicReactive.java"; then echo 'Audio capture forbidden'; exit 1; fi
+          echo "OK: black/neon interface, animation, music, stable ELM327, plasma V2."
       - name: Compilar release sem assinar nem publicar
         run: gradle --no-daemon --stacktrace assembleRelease
         working-directory: civic-drive-android
