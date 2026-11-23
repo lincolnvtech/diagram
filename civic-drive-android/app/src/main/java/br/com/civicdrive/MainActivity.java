@@ -54,6 +54,7 @@ public final class MainActivity extends Activity implements LocationListener {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static final String OBD_PREFS = "civic_obd";
     private long nextObdRetryMs = 0L;
+    private int obdRetryStreak = 0;
     private boolean autoObdEnabled = true;
     private boolean isShuttingDown = false;
     private Ui surface;
@@ -125,12 +126,18 @@ public final class MainActivity extends Activity implements LocationListener {
                         status != null && status.contains("expirou") ? "Tempo esgotado" :
                         "Desconectado";
                     obdConnected = connected;
+                    if (connected){obdRetryStreak=0;nextObdRetryMs=0L;}
                     if (!connected) { rpm = -1; coolant = -999; volts = -1; obdSpeed = -1;
                         fuelLitresPerHour = -1; lastFuelMs = 0;
                         estimatedGear=0;estimatedGearConfidence=0;estimatedGearAt=0;
                         estimatedGearReason="SEM OBD2";estimatedGearSource="—";estimatedGearSpeed=-1f;
                         mapKpa=-1; engineLoadPct=-1; intakeTempC=-999; shortFuelTrimPct=-999;
-                        nextObdRetryMs = System.currentTimeMillis() + 12000L;
+                        boolean attempting=status!=null&&status.startsWith("Conectando");
+                        if(!attempting){
+                            obdRetryStreak=Math.min(5,obdRetryStreak+1);
+                            long delay=Math.min(60000L,12000L*(1L<<Math.min(obdRetryStreak-1,3)));
+                            nextObdRetryMs=System.currentTimeMillis()+delay;
+                        }
                     } else nextObdRetryMs = 0L;
                     saveTelemetry();
                     surface.invalidate();
@@ -176,21 +183,13 @@ public final class MainActivity extends Activity implements LocationListener {
                 });
             }
         });
+        obd.setStableMode(getSharedPreferences(OBD_PREFS,MODE_PRIVATE)
+            .getBoolean("stable",true));
         surface = new Ui();
         setContentView(surface);
         handler.post(ticker);
         requestGps();
         handler.postDelayed(this::tryAutoObd, 1100L);
-        // The Cyberpunk cockpit is a presentation Activity. This MainActivity
-        // keeps owning the existing Bluetooth/ELM327 worker and telemetry.
-        if(CivicTheme.index(this)==4&&state==null){
-            handler.postDelayed(()->{
-                if(!isShuttingDown&&!isFinishing()){
-                    dashboardOpen=true;
-                    safeStart(new Intent(this,CyberpunkActivity.class));
-                }
-            },620L);
-        }
     }
 
     private void updateTrip(double litresPerHour) {
@@ -505,14 +504,10 @@ public final class MainActivity extends Activity implements LocationListener {
         @Override public boolean performClick(){super.performClick();return true;}
     }
 
-    private void pickWallpaper(){
-        new AlertDialog.Builder(this).setTitle("Plano de fundo")
-            .setSingleChoiceItems(new String[]{"Nova · esfera animada", "Civic prata", "Nova · azul minimalista"},
-                getSharedPreferences("civic_wallpaper", MODE_PRIVATE).getInt("mode",0),
-                (d,which)->{ if(surface!=null)surface.useWallpaper(which);d.dismiss(); })
-            .setNeutralButton("5 TEMAS DE CORES",(d,w)->showThemes())
-            .setNegativeButton("Cancelar",null).show();
+    private void openGarage(){
+        safeStart(new Intent(this,GarageActivity.class));
     }
+    private void pickWallpaper(){openGarage();}
     private void openRadio(){
         for(String pkg:new String[]{"com.android.fmradio","com.microntek.radio","com.ts.MainUI","com.syu.radio","com.android.radio"}){
             if(getPackageManager().getLaunchIntentForPackage(pkg)!=null){openPackage(pkg);return;}
@@ -520,16 +515,12 @@ public final class MainActivity extends Activity implements LocationListener {
         // OEM radio activities are often not exported. Let the user choose an available app.
         openApplicationCatalog(true,1);
     }
-    private void openDashboards() {
+    private void openDashboards(){
         dashboardOpen=true;
-        safeStart(new Intent(this,CivicTheme.index(this)==4?
-            CyberpunkActivity.class:DashboardActivity.class));
+        safeStart(new Intent(this,DashboardActivity.class));
     }
     private void openMusicDashboard(){
         dashboardOpen=true;
-        if(CivicTheme.index(this)==4){
-            safeStart(new Intent(this,CyberpunkActivity.class));return;
-        }
         Intent music=new Intent(this,DashboardActivity.class);
         music.putExtra("open_page",4);
         safeStart(music);
