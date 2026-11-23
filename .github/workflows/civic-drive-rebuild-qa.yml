@@ -1,0 +1,63 @@
+name: Civic Drive Rebuild QA
+on:
+  push:
+    branches: [civic-drive-rebuild-20261123]
+    paths:
+      - 'civic-drive-android/**'
+      - '.github/workflows/civic-drive-rebuild-qa.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Obter o código em teste
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+      - name: Verificar requisitos de simplicidade e segurança
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ROOT=civic-drive-android
+          C="$ROOT/app/src/main/java/br/com/civicdrive"
+          grep -q "versionCode 34" "$ROOT/app/build.gradle"
+          grep -q "versionName '2.1.0'" "$ROOT/app/build.gradle"
+          test -s "$C/GarageActivity.java"
+          grep -q 'setCarColor' "$C/CivicCarView.java"
+          grep -q 'setZoom' "$C/CivicCarView.java"
+          grep -q 'setOffset' "$C/CivicCarView.java"
+          grep -q 'new CivicOrbRenderer' "$C/MainActivity.java"
+          grep -q 'KEYCODE_MEDIA_NEXT' "$C/MainActivity.java"
+          grep -q 'getBoolean("stable",true)' "$C/MainActivity.java"
+          grep -q 'boolean stableMode=true' "$C/ObdManager.java"
+          grep -q 'boolean probeExtra=!stableMode' "$C/ObdManager.java"
+          grep -q 'drawColor(BLACK)' "$C/MainActivity.java"
+          grep -q 'GarageActivity' "$ROOT/app/src/main/AndroidManifest.xml"
+          if grep -q 'optionalCommand(out,in,"ATZ"' "$C/ObdManager.java"; then
+            echo "REPROVADO: hard-reset ELM327 voltou"; exit 1
+          fi
+          if grep -q 'approvedBackdrop' "$C/MainActivity.java"; then
+            echo "REPROVADO: imagem estática na home"; exit 1
+          fi
+          echo "OK: home preta/neon, garagem vetorial, música, estabilidade OBD2."
+      - name: Compilar release sem assinar nem publicar
+        run: gradle --no-daemon --stacktrace assembleRelease
+        working-directory: civic-drive-android
+      - name: Executar testes locais
+        run: gradle --no-daemon testDebugUnitTest
+        working-directory: civic-drive-android
