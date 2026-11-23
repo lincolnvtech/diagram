@@ -1,6 +1,7 @@
 package br.com.civicdrive;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -31,6 +32,7 @@ final class CivicOrbRenderer {
     private float speedSmooth=0f,energySmooth=.20f,rotation=0f;
     private int rpmBand=0;
     private final Context context;
+    private final Bitmap referenceTexture=CivicPlasmaReference.decode();
 
     CivicOrbRenderer(Context c){context=c.getApplicationContext();}
     private static float clamp(float x,float lo,float hi){return Math.max(lo,Math.min(hi,x));}
@@ -140,12 +142,23 @@ final class CivicOrbRenderer {
             new float[]{0f,.53f,.76f,1f},Shader.TileMode.CLAMP));
         c.drawCircle(cx,cy,radius*1.38f,p);p.setShader(null);
 
-        // Dense electric neural mesh: 20 branching blue/cyan filaments of
-        // variable length, gradually undulating over the dark sphere.
-        for(int i=0;i<20;i++){
-            float phase=(i+.21f)*TAU/20f+rotation*.32f;
+        // The approved actual plasma image supplies the reference texture.
+        // Translucent and feathered, it has no background rectangle.
+        // Branching filaments below animate ON TOP of its original pattern.
+        if(referenceTexture!=null){
+            fill(Color.WHITE);
+            p.setFilterBitmap(true);
+            p.setAlpha(232);
+            rim.set(cx-194f,cy-157f,cx+194f,cy+157f);
+            c.drawBitmap(referenceTexture,null,rim,p);
+            p.setAlpha(255);
+        }
+
+        // Light animated branches overlay the actual approved plasma texture.
+        for(int i=0;i<12;i++){
+            float phase=(i+.21f)*TAU/12f+rotation*.32f;
             float length=139f+(i%5)*8.2f+7.5f*wave(t*.55f,i*.9f);
-            float visibility=.62f+.22f*(.5f+.5f*wave(t*1.2f,i*1.3f));
+            float visibility=.37f+.18f*(.5f+.5f*wave(t*1.2f,i*1.3f));
             int col=i%5==0?ICE:i%2==0?CYAN:AZURE;
             lightning(c,cx,cy,length,phase,t,i,col,visibility);
         }
@@ -170,10 +183,10 @@ final class CivicOrbRenderer {
         // Cyan central plasma burst. Keep a small white nucleus
         // (the earlier oversized white blob obscured the actual electricity).
         fill(Color.WHITE);
-        float size=91f+9f*pulse;
+        float size=64f+8f*pulse;
         p.setShader(new RadialGradient(cx,cy,size,
-            new int[]{alpha(ICE,243),alpha(CYAN,190),
-                alpha(AZURE,92),Color.TRANSPARENT},
+            new int[]{alpha(ICE,130),alpha(CYAN,90),
+                alpha(AZURE,38),Color.TRANSPARENT},
             new float[]{0f,.14f,.40f,1f},Shader.TileMode.CLAMP));
         c.drawCircle(cx,cy,size,p);p.setShader(null);
         fill(alpha(ICE,225));c.drawCircle(cx,cy,6.5f+2.2f*pulse,p);
