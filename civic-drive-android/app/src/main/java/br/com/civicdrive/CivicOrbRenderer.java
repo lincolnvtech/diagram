@@ -11,216 +11,181 @@ import android.graphics.Shader;
 import android.os.SystemClock;
 
 /**
- * Civic Drive v2.0.8 - original procedural electromagnetic plasma.
+ * Nova Plasma V2 — deep-black electric core modelled after the owner's
+ * approved reference: thin branched lightning, dense interior, intense
+ * cyan nucleus, blue orbiting rings and a restrained outer corona.
  *
- * The reference is an electric blue/violet/magenta ball with a bright central
- * nucleus, orbiting filaments and no single rigid bitmap. The orb is drawn
- * directly into Canvas so that its interior ACTUALLY moves.
- *
- * RPM: primary nucleus color, independent of music.
- * Vehicle speed: secondary arc color and flow speed, only with real speed data.
- * Android music activity: mild additional pulse/brightness, NOT claimed to be
- * beat detection. No microphone, Visualizer, audio capture, background threads
- * or Bluetooth changes. Modest canvas work at the host's existing <=9fps.
+ * Not a spinning bitmap or a static screenshot: light paths move slowly.
+ * No audio recording, GPU shader, new threads, OBD commands or networking.
+ * Paint and Path objects are reused to keep the Android head unit responsive.
  */
 final class CivicOrbRenderer {
-    private static final float TAU=(float)(Math.PI*2.0);
-    // One electric-blue spectrum; amber is reserved for genuine high RPM.
-    private static final int[] RPM_COLORS={
-        Color.rgb(16,214,255),
-        Color.rgb(30,166,255),
-        Color.rgb(22,112,244),
-        Color.rgb(50,168,255),
-        Color.rgb(246,160,65)
-    };
-    private static final int[] SPEED_COLORS={
-        Color.rgb(19,112,245),Color.rgb(16,175,250),
-        Color.rgb(30,199,255),Color.rgb(97,220,255)
-    };
-
+    private static final float TAU=6.2831853f;
+    private static final int BLACK=0xff020611, COBALT=0xff0754f9;
+    private static final int AZURE=0xff087eff, BLUE=0xff1bafff;
+    private static final int CYAN=0xff55eafa, ICE=0xffe8fbff;
+    private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path path=new Path();
+    private final RectF rim=new RectF();
+    private long lastFrame=0L;
+    private float speedSmooth=0f,energySmooth=.20f,rotation=0f;
+    private int rpmBand=0;
     private final Context context;
-    private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
-    private final Path strand=new Path();
-    private final RectF ellipse=new RectF();
-    private int band=0,previousBand=0;
-    private long bandChangedAt=0L;
-    private float smoothSpeed=0f;
-    private float smoothPower=.24f;
-    private long lastFrameAt;
 
-    CivicOrbRenderer(Context context) {
-        this.context=context.getApplicationContext();
-    }
-
-    private static float clamp(float n,float lo,float hi){
-        return Math.max(lo,Math.min(hi,n));
-    }
-    private static int opacity(int color,float alpha){
-        return Color.argb((int)clamp(alpha,0,255),
-            Color.red(color),Color.green(color),Color.blue(color));
-    }
-    private static int speedColor(float speed){
-        float kmh=clamp(speed,0f,125f);
-        if(kmh<35f)return CivicTheme.blend(SPEED_COLORS[0],SPEED_COLORS[1],kmh/35f);
-        if(kmh<75f)return CivicTheme.blend(SPEED_COLORS[1],SPEED_COLORS[2],(kmh-35f)/40f);
-        return CivicTheme.blend(SPEED_COLORS[2],SPEED_COLORS[3],(kmh-75f)/50f);
-    }
-    private static int index(float rpm){
-        return rpm<900f?0:rpm<2000f?1:rpm<3500f?2:rpm<5000f?3:4;
+    CivicOrbRenderer(Context c){context=c.getApplicationContext();}
+    private static float clamp(float x,float lo,float hi){return Math.max(lo,Math.min(hi,x));}
+    private static int alpha(int color,float amount){
+        int v=(int)clamp(amount,0f,255f);
+        return Color.argb(v,Color.red(color),Color.green(color),Color.blue(color));
     }
     private void fill(int color){
-        p.reset();
-        p.setAntiAlias(true);
-        p.setColor(color);
-        p.setStyle(Paint.Style.FILL);
+        p.reset();p.setAntiAlias(true);p.setColor(color);p.setStyle(Paint.Style.FILL);
     }
-
+    private void stroke(int color,float width){
+        fill(color);p.setStyle(Paint.Style.STROKE);
+        p.setStrokeJoin(Paint.Join.ROUND);p.setStrokeCap(Paint.Cap.ROUND);
+        p.setStrokeWidth(width);
+    }
+    private void glowPath(Canvas c,Path shape,int color,float strength,float thickness){
+        stroke(alpha(color,19f*strength),thickness*5f);c.drawPath(shape,p);
+        p.setColor(alpha(color,58f*strength));p.setStrokeWidth(thickness*2.3f);c.drawPath(shape,p);
+        p.setColor(alpha(color,195f*strength));p.setStrokeWidth(thickness);c.drawPath(shape,p);
+    }
+    private void glowArc(Canvas c,RectF bounds,float start,float sweep,int color,float strength){
+        stroke(alpha(color,21f*strength),13f);c.drawArc(bounds,start,sweep,false,p);
+        p.setColor(alpha(color,72f*strength));p.setStrokeWidth(5.6f);
+        c.drawArc(bounds,start,sweep,false,p);
+        p.setColor(alpha(color,220f*strength));p.setStrokeWidth(1.65f);
+        c.drawArc(bounds,start,sweep,false,p);
+    }
+    private static float wave(float t,float offset){
+        return (float)Math.sin(t+offset);
+    }
     /**
-     * @param energy 0..1 lightweight playback activity animation from Android
-     * @param rpm real ELM327 RPM or a negative sentinel
-     * @param kmh real OBD2/GPS speed or a negative sentinel; no inferred values
-     * @param rpmValid false whenever OBD2 is disconnected
+     * A branching spark crosses a curved section of the plasma. Every branch
+     * is deterministic and changes gently over time, never flashing entire frames.
      */
-    void draw(Canvas c,float cx,float cy,float energy,float rpm,
-              float kmh,boolean rpmValid) {
-        final long ms=SystemClock.uptimeMillis();
-        final float t=ms/1000f;
-        final float dt=lastFrameAt<=0? .11f:clamp((ms-lastFrameAt)/1000f,.01f,.27f);
-        lastFrameAt=ms;
-
-        final boolean realRpm=rpmValid&&rpm>=0f&&rpm<=8500f;
-        final boolean realSpeed=kmh>=0f&&kmh<=260f;
-        final float speed=realSpeed?clamp(kmh,0f,180f):0f;
-        final float smoothing=clamp(dt*2.8f,.07f,.37f);
-        smoothSpeed+=(speed-smoothSpeed)*smoothing;
-        smoothPower+=(clamp(energy,0f,1f)-smoothPower)*.18f;
-        final float speedNorm=realSpeed?clamp(smoothSpeed/125f,0f,1f):0f;
-        final float power=clamp(smoothPower,0f,1f);
-        final int theme=CivicTheme.index(context);
-
-        final int requestedBand=realRpm?index(rpm):0;
-        if(requestedBand!=band){
-            previousBand=band;
-            band=requestedBand;
-            bandChangedAt=ms;
+    private void lightning(Canvas c,float cx,float cy,float outer,float phase,
+                           float time,int series,int color,float intensity){
+        final float spin=phase+time*.045f*(series%2==0?1f:-1f);
+        final float wave=wave(time*.48f,series*2.1f);
+        final float sx=cx+26f*(float)Math.cos(spin+.55f);
+        final float sy=cy+25f*(float)Math.sin(spin+.55f);
+        final float ex=cx+outer*(float)Math.cos(spin+1.65f);
+        final float ey=cy+outer*(float)Math.sin(spin+1.65f);
+        path.rewind();path.moveTo(sx,sy);
+        for(int step=1;step<=11;step++){
+            float u=step/11f;
+            float angle=spin+.55f+1.10f*u;
+            float distance=26f+(outer-26f)*u;
+            float perturb=(7f+11f*u)*wave(time*.75f+step*.37f,
+                series*1.97f+step*2.48f);
+            float radial=distance+perturb;
+            float px=cx+radial*(float)Math.cos(angle);
+            float py=cy+radial*(float)Math.sin(angle);
+            path.lineTo(px,py);
         }
-        final float blend=clamp((ms-bandChangedAt)/520f,0f,1f);
-        int core=CivicTheme.blend(RPM_COLORS[previousBand],RPM_COLORS[band],blend);
-        core=CivicTheme.orbAccent(core,theme);
-        // Maintain 0..125 km/h secondary hue control independently of RPM.
-        int speedHue=realSpeed?speedColor(smoothSpeed):CivicTheme.color(theme,1);
-        if(theme!=0&&theme!=4)speedHue=CivicTheme.blend(speedHue,CivicTheme.color(theme,1),.62f);
-        final boolean amber=realRpm&&band==4;
-        final int edge=amber?CivicTheme.blend(core,speedHue,.22f):
-            CivicTheme.blend(core,speedHue,realSpeed?.61f:.34f);
-        final int purple=amber?CivicTheme.blend(core,speedHue,.14f):
-            CivicTheme.blend(speedHue,Color.rgb(34,138,255),.35f);
-        final int white=amber?Color.rgb(255,241,212):Color.rgb(241,252,255);
-
-        // Speed makes the magnetic lines travel faster, never shakes the orb.
-        final float speedFlow=.62f+speedNorm*.91f;
-        final float breathe=.5f+.5f*(float)Math.sin(t*(1.12f+power*.35f));
-        final float pulse=.5f+.5f*(float)Math.sin(t*(1.45f+power*1.8f));
-        final float radius=180f+(4f*breathe)+(6f*power);
-
-        // Opaque near-black plasma body masks any static orb in the HUD backdrop.
-        fill(Color.rgb(4,8,23));
-        p.setShader(new RadialGradient(cx,cy,radius+31f,
-            new int[]{
-                Color.rgb(7,13,35),
-                Color.rgb(3,8,25),
-                opacity(core,210),
-                opacity(edge,75),
-                Color.TRANSPARENT
-            },new float[]{0f,.56f,.79f,.92f,1f},Shader.TileMode.CLAMP));
-        c.drawCircle(cx,cy,radius+31f,p);
-        p.setShader(null);
-
-        // Colored electric atmosphere, with visible outer corona and sharp rim.
-        fill(Color.WHITE);
-        p.setShader(new RadialGradient(cx,cy,radius+51f,
-            new int[]{opacity(purple,14f+17f*power),
-                opacity(edge,35f+25f*pulse),
-                opacity(edge,74f+65f*power),
-                Color.TRANSPARENT},
-            new float[]{0f,.64f,.86f,1f},Shader.TileMode.CLAMP));
-        c.drawCircle(cx,cy,radius+51f,p);p.setShader(null);
-
-        // 12 full field-lines radiate from the magnetic nucleus, curve over the
-        // whole orb and return inward: continuous phase motion makes it 'alive'.
-        // One thick translucent stroke + one bright sharp stroke per filament.
-        for(int i=0;i<10;i++){
-            strand.rewind();
-            float phase=i*TAU/10f;
-            float variation=(i%3)*.31f;
-            final int line=i%3==0?white:i%3==1?edge:purple;
-            final float drift=t*speedFlow*(i%2==0?.34f:-.28f);
-            final float theta=phase+drift;
-            final float startX=cx+14f*(float)Math.cos(theta);
-            final float startY=cy+12f*(float)Math.sin(theta);
-            strand.moveTo(startX,startY);
-            for(int j=1;j<=20;j++){
-                final float u=j/20f;
-                // Each line bends out to the perimeter then circles back to core.
-                final float r=(25f+153f*(float)Math.pow(Math.sin(Math.PI*u),.74))
-                    *(1f+.07f*(float)Math.sin(t*.55f+i*1.7f+j*.51f));
-                final float spin=theta+(u-.5f)*(4.25f+variation)
-                    +.23f*(float)Math.sin(t*.68f+i*.9f+u*TAU);
-                float px=cx+r*(float)Math.cos(spin);
-                float py=cy+r*(float)Math.sin(spin);
-                strand.lineTo(px,py);
+        // The preview has highly branched, luminous electricity,
+        // not solid thick wires or a single flat circular rim.
+        glowPath(c,path,color,intensity,1.45f);
+        for(int fork=0;fork<3;fork++){
+            float u=.30f+fork*.22f;
+            float angle=spin+.55f+1.10f*u;
+            float rr=26f+(outer-26f)*u;
+            float ox=cx+rr*(float)Math.cos(angle);
+            float oy=cy+rr*(float)Math.sin(angle);
+            path.rewind();path.moveTo(ox,oy);
+            for(int n=1;n<=4;n++){
+                float v=n/4f;
+                float bend=(fork%2==0?1f:-1f)*(.22f+.32f*v);
+                float a=angle+bend+time*.035f;
+                float r=rr+22f*v+13f*v*wave(time*.9f,series+fork+n);
+                path.lineTo(cx+r*(float)Math.cos(a),
+                            cy+r*(float)Math.sin(a));
             }
-            fill(opacity(line,65f+38f*power));
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(5.9f+3.7f*power);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            c.drawPath(strand,p);
-            p.setColor(opacity(line,195f+45f*pulse));
-            p.setStrokeWidth(1.55f+1.05f*power);
-            c.drawPath(strand,p);
+            glowPath(c,path,fork%3==0?ICE:CYAN,intensity*.72f,.78f);
         }
+    }
+    /** Called by the existing 7–8 fps home and music dashboards. */
+    void draw(Canvas c,float cx,float cy,float energy,float rpm,
+              float kmh,boolean rpmValid){
+        long now=SystemClock.uptimeMillis();
+        final float t=now/1000f;
+        float dt=lastFrame==0? .14f:clamp((now-lastFrame)/1000f,.02f,.4f);
+        lastFrame=now;
+        boolean realRpm=rpmValid&&rpm>=0&&rpm<=8500;
+        boolean realSpeed=kmh>=0&&kmh<=260;
+        speedSmooth+=(realSpeed?kmh-speedSmooth:-speedSmooth)*clamp(dt*2f,.04f,.24f);
+        energySmooth+=(clamp(energy,0f,1f)-energySmooth)*.16f;
+        rotation+=dt*(.10f+clamp(speedSmooth/180f,0f,1f)*.13f);
+        float pulse=.5f+.5f*wave(t*(1.10f+energySmooth*.8f),0);
+        float breath=.5f+.5f*wave(t*.61f,.9f);
+        float radius=178f+6f*breath;
+        rpmBand=realRpm?(rpm<1600?0:rpm<3400?1:rpm<5100?2:3):0;
+        // Bright blue at idle and medium RPM. The original plasma remains blue;
+        // high RPM uses amber only in the dedicated warning gauges.
+        final int[] colors={AZURE,COBALT,BLUE,CYAN};
+        int electric=colors[rpmBand];
 
-        // Surface electricity: eight orbiting curved magnetic arches, no whole-
-        // sphere rotation. These are long, changing trajectories, not one halo.
-        for(int i=0;i<6;i++){
-            final float phase=i*.79f;
-            final float modulation=6f*(float)Math.sin(t*.83f+i*1.17f);
-            final float r=176f+(i%3)*7.5f+modulation;
-            ellipse.set(cx-r,cy-r*.94f,cx+r,cy+r*.94f);
-            final float start=(i*41f+t*speedFlow*(i%2==0?10.8f:-8.8f))%360f;
-            final float sweep=43f+25f*(.5f+.5f*(float)Math.sin(t*.39f+i));
-            int accent=i%4==0?white:i%2==0?edge:purple;
-            fill(opacity(accent,54f+42f*power));
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeCap(Paint.Cap.ROUND);
-            p.setStrokeWidth(5.2f+2.8f*power);
-            c.drawArc(ellipse,start,sweep,false,p);
-            p.setColor(opacity(accent,179f+45f*pulse));
-            p.setStrokeWidth(1.7f+0.8f*power);
-            c.drawArc(ellipse,start,sweep,false,p);
-        }
-
-        // Bright nucleus with converging filaments, but not a flat white blob.
+        // Very dark spherical depth and restrained luminous blue edge.
         fill(Color.WHITE);
-        float coreSize=37f+14f*power+7f*breathe;
-        p.setShader(new RadialGradient(cx,cy,coreSize*2.35f,
-            new int[]{opacity(white,235),opacity(core,198),
-                opacity(purple,80),Color.TRANSPARENT},
-            new float[]{0f,.26f,.57f,1f},Shader.TileMode.CLAMP));
-        c.drawCircle(cx,cy,coreSize*2.35f,p);p.setShader(null);
-        fill(opacity(white,225f));
-        c.drawCircle(cx,cy,6.5f+3f*pulse,p);
+        p.setShader(new RadialGradient(cx,cy,radius+31f,
+            new int[]{0xff063464,0xff02142d,BLACK,0xff062d6a,Color.TRANSPARENT},
+            new float[]{0f,.20f,.68f,.87f,1f},Shader.TileMode.CLAMP));
+        c.drawCircle(cx,cy,radius+31f,p);p.setShader(null);
+        fill(Color.WHITE);
+        p.setShader(new RadialGradient(cx,cy,radius*1.38f,
+            new int[]{alpha(COBALT,14),alpha(AZURE,24f+18f*pulse),
+                alpha(electric,38f+27f*pulse),Color.TRANSPARENT},
+            new float[]{0f,.53f,.76f,1f},Shader.TileMode.CLAMP));
+        c.drawCircle(cx,cy,radius*1.38f,p);p.setShader(null);
 
-        // Sparse charged particles; deterministic positions, zero allocations.
-        for(int i=0;i<22;i++){
-            final float base=i*2.399963f;
-            final float radial=61f+(i%7)*17.8f;
-            final float a=base+t*speedFlow*(i%2==0?.23f:-.18f);
-            float px=cx+radial*(float)Math.cos(a);
-            float py=cy+radial*(float)Math.sin(a);
-            float shimmer=.5f+.5f*(float)Math.sin(t*2.2f+i*1.4f);
-            fill(opacity(i%4==0?white:i%2==0?edge:purple,105f+112f*shimmer));
-            c.drawCircle(px,py,1.15f+1.05f*shimmer+power*.6f,p);
+        // Dense electric neural mesh: 20 branching blue/cyan filaments of
+        // variable length, gradually undulating over the dark sphere.
+        for(int i=0;i<20;i++){
+            float phase=(i+.21f)*TAU/20f+rotation*.32f;
+            float length=139f+(i%5)*8.2f+7.5f*wave(t*.55f,i*.9f);
+            float visibility=.62f+.22f*(.5f+.5f*wave(t*1.2f,i*1.3f));
+            int col=i%5==0?ICE:i%2==0?CYAN:AZURE;
+            lightning(c,cx,cy,length,phase,t,i,col,visibility);
+        }
+
+        // Thin, oblique energized orbital rings from the approved picture.
+        // Never mask the sphere with a thick full circle.
+        for(int i=0;i<3;i++){
+            float orbit=185f+i*11f+3f*wave(t*.37f,i);
+            float scale=i==1?.69f:.87f;
+            rim.set(cx-orbit,cy-orbit*scale,cx+orbit,cy+orbit*scale);
+            float angle=i*86f+t*(i%2==0?5.2f:-3.4f);
+            glowArc(c,rim,angle,136f+i*24f,i==1?CYAN:AZURE,.70f+i*.08f);
+        }
+
+        // Fine outer blue boundary and two detached electric arcs.
+        rim.set(cx-radius,cy-radius,cx+radius,cy+radius);
+        for(int i=0;i<4;i++){
+            float start=i*92f+19f+13f*wave(t*.46f,i*1.9f);
+            glowArc(c,rim,start,43f+12f*pulse,i%2==0?COBALT:CYAN,.62f);
+        }
+
+        // Cyan central plasma burst. Keep a small white nucleus
+        // (the earlier oversized white blob obscured the actual electricity).
+        fill(Color.WHITE);
+        float size=91f+9f*pulse;
+        p.setShader(new RadialGradient(cx,cy,size,
+            new int[]{alpha(ICE,243),alpha(CYAN,190),
+                alpha(AZURE,92),Color.TRANSPARENT},
+            new float[]{0f,.14f,.40f,1f},Shader.TileMode.CLAMP));
+        c.drawCircle(cx,cy,size,p);p.setShader(null);
+        fill(alpha(ICE,225));c.drawCircle(cx,cy,6.5f+2.2f*pulse,p);
+
+        // Light motes reinforce depth without affecting OBD2 polling.
+        for(int i=0;i<24;i++){
+            float a=i*2.399963f+t*(i%2==0?.16f:-.13f);
+            float rr=47f+(i%8)*16.0f;
+            float flicker=.46f+.54f*(.5f+.5f*wave(t*2.5f,i*1.3f));
+            fill(alpha(i%4==0?ICE:CYAN,55f+165f*flicker));
+            c.drawCircle(cx+rr*(float)Math.cos(a),cy+rr*(float)Math.sin(a),
+                         .7f+1.5f*flicker,p);
         }
     }
 }
