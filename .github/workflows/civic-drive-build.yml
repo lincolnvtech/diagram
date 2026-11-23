@@ -1,4 +1,4 @@
-# Civic Drive v2.1.0: rebuild minimal preto/azul-neon; garage + OBD2 stability.
+# Civic Drive v2.1.1: Nova Plasma V2 with lightweight branching lightning.
 name: Civic G8 - APK assinado permanente
 on:
   push:
@@ -53,8 +53,8 @@ jobs:
           ROOT=civic-drive-android
           C="$ROOT/app/src/main/java/br/com/civicdrive"
           test -f "$ROOT/app/build.gradle"
-          grep -q 'versionCode 34' "$ROOT/app/build.gradle"
-          grep -q "versionName '2.1.0'" "$ROOT/app/build.gradle"
+          grep -q 'versionCode 35' "$ROOT/app/build.gradle"
+          grep -q "versionName '2.1.1'" "$ROOT/app/build.gradle"
           test -s "$C/MainActivity.java"
           test -s "$C/CivicOrbRenderer.java"
           test -s "$C/CivicCarView.java"
@@ -78,7 +78,9 @@ jobs:
           if grep -q 'android.permission.RECORD_AUDIO' "$ROOT/app/src/main/AndroidManifest.xml"; then
             echo 'ERRO: acesso desnecessário ao microfone'; exit 1
           fi
-          echo 'OK: visual minimalista, garagem, mídia Android e OBD2 estável.'
+          grep -q 'for(int i=0;i<20;i++)' "$C/CivicOrbRenderer.java"
+          grep -q 'private void lightning(' "$C/CivicOrbRenderer.java"
+          echo 'OK: visual, garagem, música, modo OBD2 estável e novo plasma.'
       - name: Instalar ferramentas do Android
         shell: bash
         run: |
@@ -115,7 +117,7 @@ jobs:
               raise SystemExit('ERRO: Alias de assinatura divergente.')
           android_tools = pathlib.Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
           unsigned = root/'civic-drive-android/app/build/outputs/apk/release/app-release-unsigned.apk'
-          signed = root/'civic-drive/civic-drive-v2.1.0.apk'
+          signed = root/'civic-drive/civic-drive-v2.1.1.apk'
           with tempfile.TemporaryDirectory(prefix='civic-sign-') as temporary:
               keystore = pathlib.Path(temporary)/'release.p12'
               keystore.write_bytes(base64.b64decode(bundle['keyStore']))
@@ -137,26 +139,26 @@ jobs:
               expected = 'e1259f300052309981546e568f78903c2daa013f86a3c4cf6a46ade49de97374'
               if expected not in certs.replace(':','').lower():
                   raise SystemExit('ERRO: O certificado nao corresponde a chave permanente esperada.')
-          print('APK v2.1.0 validado com assinatura permanente.')
+          print('APK v2.1.1 validado com assinatura permanente.')
           PY
       - name: Publicar APK e manifesto da atualizacao
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK=civic-drive/civic-drive-v2.1.0.apk
+          APK=civic-drive/civic-drive-v2.1.1.apk
           test -s "$APK"
           cp "$APK" civic-drive/civic-drive-latest.apk
           SHA=$(sha256sum "$APK" | awk '{print $1}')
-          printf '{"versionCode":34,"versionName":"2.1.0","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.1.0.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
+          printf '{"versionCode":35,"versionName":"2.1.1","apkUrl":"https://raw.githubusercontent.com/lincolnvtech/diagram/civic-drive-build/civic-drive/civic-drive-v2.1.1.apk","sha256":"%s"}\n' "$SHA" > civic-drive/latest.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add civic-drive/civic-drive-v2.1.0.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
+          git add civic-drive/civic-drive-v2.1.1.apk civic-drive/civic-drive-latest.apk civic-drive/latest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'build: Civic Drive 2.1.0 clean black-neon cockpit'
+            git commit -m 'build: Civic Drive 2.1.1 clean black-neon cockpit'
             git push origin HEAD:civic-drive-build
           fi
       - name: Guardar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: civic-g8-v2.1.0-release
-          path: civic-drive/civic-drive-v2.1.0.apk
+          name: civic-g8-v2.1.1-release
+          path: civic-drive/civic-drive-v2.1.1.apk
