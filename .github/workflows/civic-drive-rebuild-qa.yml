@@ -54,11 +54,25 @@ jobs:
           if grep -q 'approvedBackdrop' "$C/MainActivity.java"; then
             echo "REPROVADO: imagem estática na home"; exit 1
           fi
-          grep -q 'for(int i=0;i<20;i++)' "$C/CivicOrbRenderer.java"
+          grep -q 'for(int i=0;i<12;i++)' "$C/CivicOrbRenderer.java"
           grep -q 'private void lightning(' "$C/CivicOrbRenderer.java"
           grep -q 'glowArc(' "$C/CivicOrbRenderer.java"
           if grep -q 'new Visualizer(' "$C/MusicReactive.java"; then echo 'Audio capture forbidden'; exit 1; fi
-          echo "OK: black/neon interface, animation, music, stable ELM327, plasma V2."
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, base64, hashlib
+          p=Path('civic-drive-android/app/src/main/java/br/com/civicdrive/CivicPlasmaReference.java')
+          text=p.read_text()
+          match=re.search(r'Base64\.decode\("([^"]+)"',text)
+          assert match, 'approved plasma asset missing'
+          blob=base64.b64decode(match.group(1),validate=True)
+          assert blob[:4]==b'RIFF' and blob[8:12]==b'WEBP'
+          expected='fa46dd66183051386528e845dda5c9c9c8ebd0697fc333ab01e29a4ec1ed8ab2'
+          actual=hashlib.sha256(blob).hexdigest()
+          assert actual==expected, f'plasma image does not match approved reference crop: {actual}'
+          print('OK: approved plasma image exact SHA256:',actual)
+          PY
+          echo "OK: black/neon, music, stable ELM327 and original plasma."
       - name: Compilar release sem assinar nem publicar
         run: gradle --no-daemon --stacktrace assembleRelease
         working-directory: civic-drive-android
