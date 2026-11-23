@@ -25,18 +25,17 @@ import android.os.SystemClock;
  */
 final class CivicOrbRenderer {
     private static final float TAU=(float)(Math.PI*2.0);
+    // One electric-blue spectrum; amber is reserved for genuine high RPM.
     private static final int[] RPM_COLORS={
-        Color.rgb(68,216,248),  // 0: idle / low
-        Color.rgb(31,147,247),  // 1: gentle acceleration
-        Color.rgb(53,95,251),   // 2: middle band
-        Color.rgb(169,93,245),  // 3: energetic band
-        Color.rgb(246,160,65)   // 4: very high RPM - amber
+        Color.rgb(16,214,255),
+        Color.rgb(30,166,255),
+        Color.rgb(22,112,244),
+        Color.rgb(50,168,255),
+        Color.rgb(246,160,65)
     };
     private static final int[] SPEED_COLORS={
-        Color.rgb(35,217,237),  // 0 km/h
-        Color.rgb(53,130,248),  // 35 km/h
-        Color.rgb(144,102,250), // 75 km/h
-        Color.rgb(237,93,228),  // >=125 km/h
+        Color.rgb(19,112,245),Color.rgb(16,175,250),
+        Color.rgb(30,199,255),Color.rgb(97,220,255)
     };
 
     private final Context context;
@@ -115,14 +114,14 @@ final class CivicOrbRenderer {
         final int edge=amber?CivicTheme.blend(core,speedHue,.22f):
             CivicTheme.blend(core,speedHue,realSpeed?.61f:.34f);
         final int purple=amber?CivicTheme.blend(core,speedHue,.14f):
-            CivicTheme.blend(speedHue,Color.rgb(210,99,248),(theme==0||theme==4)?.54f:.16f);
-        final int white=amber?Color.rgb(255,241,212):Color.rgb(236,251,255);
+            CivicTheme.blend(speedHue,Color.rgb(34,138,255),.35f);
+        final int white=amber?Color.rgb(255,241,212):Color.rgb(241,252,255);
 
         // Speed makes the magnetic lines travel faster, never shakes the orb.
         final float speedFlow=.62f+speedNorm*.91f;
         final float breathe=.5f+.5f*(float)Math.sin(t*(1.12f+power*.35f));
         final float pulse=.5f+.5f*(float)Math.sin(t*(1.45f+power*1.8f));
-        final float radius=188f+(6f*breathe)+(8f*power);
+        final float radius=180f+(4f*breathe)+(6f*power);
 
         // Opaque near-black plasma body masks any static orb in the HUD backdrop.
         fill(Color.rgb(4,8,23));
@@ -150,9 +149,9 @@ final class CivicOrbRenderer {
         // 12 full field-lines radiate from the magnetic nucleus, curve over the
         // whole orb and return inward: continuous phase motion makes it 'alive'.
         // One thick translucent stroke + one bright sharp stroke per filament.
-        for(int i=0;i<12;i++){
+        for(int i=0;i<10;i++){
             strand.rewind();
-            float phase=i*TAU/12f;
+            float phase=i*TAU/10f;
             float variation=(i%3)*.31f;
             final int line=i%3==0?white:i%3==1?edge:purple;
             final float drift=t*speedFlow*(i%2==0?.34f:-.28f);
@@ -183,7 +182,7 @@ final class CivicOrbRenderer {
 
         // Surface electricity: eight orbiting curved magnetic arches, no whole-
         // sphere rotation. These are long, changing trajectories, not one halo.
-        for(int i=0;i<8;i++){
+        for(int i=0;i<6;i++){
             final float phase=i*.79f;
             final float modulation=6f*(float)Math.sin(t*.83f+i*1.17f);
             final float r=176f+(i%3)*7.5f+modulation;
